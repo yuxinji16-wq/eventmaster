@@ -1,0 +1,3 @@
+"""
+EventMaster Pro Backend App
+"""

@@ -1,0 +1,12 @@
+{
+  "tasks": [
+    {
+      "id": "cfa05f00",
+      "cron": "*/30 * * * *",
+      "prompt": "实现完整前后端功能，禁止幻觉和占位/TODO，建立完整单元测试，全部通过",
+      "createdAt": 1775462732298,
+      "lastFiredAt": 1775481130290,
+      "recurring": true
+    }
+  ]
+}
