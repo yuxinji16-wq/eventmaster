@@ -28,6 +28,15 @@ from app.schemas.review import (
     ReviewFeedbackBase, ReviewFeedbackCreate, ReviewFeedbackUpdate, ReviewFeedbackResponse,
     ReviewConclusionBase, ReviewConclusionCreate, ReviewConclusionUpdate, ReviewConclusionResponse
 )
+from app.schemas.user import (
+    UserBase, UserCreate, UserUpdate, UserResponse, UserWithPermissions,
+    RoleBase, RoleCreate, RoleUpdate, RoleResponse,
+    LoginRequest, LoginResponse, RegisterRequest,
+    PermissionResponse
+)
+from app.schemas.settings import (
+    SiteSettingsBase, SiteSettingsUpdate, SiteSettingsResponse
+)
 
 __all__ = [
     # Activity
@@ -51,4 +60,11 @@ __all__ = [
     "ReviewBase", "ReviewCreate", "ReviewUpdate", "ReviewResponse",
     "ReviewFeedbackBase", "ReviewFeedbackCreate", "ReviewFeedbackUpdate", "ReviewFeedbackResponse",
     "ReviewConclusionBase", "ReviewConclusionCreate", "ReviewConclusionUpdate", "ReviewConclusionResponse",
+    # User & Auth
+    "UserBase", "UserCreate", "UserUpdate", "UserResponse", "UserWithPermissions",
+    "RoleBase", "RoleCreate", "RoleUpdate", "RoleResponse",
+    "LoginRequest", "LoginResponse", "RegisterRequest",
+    "PermissionResponse",
+    # Settings
+    "SiteSettingsBase", "SiteSettingsUpdate", "SiteSettingsResponse",
 ]

@@ -173,12 +173,16 @@ function createApiError(message: string, status?: number, isNetworkError = false
   return { message, status, isNetworkError, isTimeout };
 }
 
-async function request<T>(endpoint: string, options: RequestInit = {}, retries = MAX_RETRIES): Promise<T> {
+export async function request<T>(endpoint: string, options: RequestInit = {}, retries = MAX_RETRIES): Promise<T> {
   const url = `${API_BASE}${endpoint}`;
+
+  // 从 localStorage 获取 token
+  const token = localStorage.getItem('auth_token');
 
   const config: RequestInit = {
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
       ...options.headers,
     },
     ...options,
@@ -196,7 +200,25 @@ async function request<T>(endpoint: string, options: RequestInit = {}, retries =
       const response = await fetch(url, config);
 
       if (!response.ok) {
-        const error = createApiError(`HTTP Error: ${response.status}`, response.status);
+        // 401  Unauthorized - 清除 token 并重定向到登录页
+        if (response.status === 401) {
+          localStorage.removeItem('auth_token');
+          window.location.href = '/login';
+          throw createApiError('登录已过期，请重新登录', 401);
+        }
+
+        let errorMessage = `HTTP Error: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          // FastAPI 返回 { detail: "错误信息" } 格式
+          if (errorData && typeof errorData === 'object') {
+            errorMessage = errorData.detail || errorData.message || JSON.stringify(errorData);
+          }
+        } catch {
+          // 解析失败，使用默认消息
+          errorMessage = response.statusText || errorMessage;
+        }
+        const error = createApiError(errorMessage, response.status);
         console.error(`API Request Error (attempt ${attempt}/${retries}):`, error);
         throw error;
       }
@@ -206,7 +228,18 @@ async function request<T>(endpoint: string, options: RequestInit = {}, retries =
     } catch (error) {
       clearTimeout(timeoutId);
 
-      if (error instanceof Error) {
+      // 检查是否是 ApiError 格式 { message, status, isNetworkError, isTimeout }
+      if (error && typeof error === 'object' && 'message' in error) {
+        const apiErr = error as ApiError;
+        if (apiErr.isTimeout) {
+          lastError = createApiError('请求超时，请检查网络连接', undefined, false, true);
+        } else if (apiErr.isNetworkError) {
+          lastError = createApiError('网络错误，请检查网络连接', undefined, true);
+        } else {
+          lastError = apiErr;
+        }
+        console.error(`API Error (attempt ${attempt}/${retries}):`, lastError);
+      } else if (error instanceof Error) {
         if (error.name === 'AbortError') {
           lastError = createApiError('请求超时，请检查网络连接', undefined, false, true);
           console.error(`API Timeout (attempt ${attempt}/${retries}):`, lastError);
@@ -271,9 +304,9 @@ export const activitiesApi = {
 export const budgetApi = {
   getOverview: (year: string) => request<ApiBudgetOverview>(`/budget/overview?year=${year}`),
   updateQuota: (data: { year: string; quota: number }) =>
-    request<{ message: string }>('/budget/quota', {
+    request<{ message: string }>(`/budget/quotas?year=${data.year}`, {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: JSON.stringify({ quota: data.quota }),
     }),
   getActivities: (year: string) =>
     request<{ activities: ApiActivity[]; total: number }>(`/budget/activities?year=${year}`),

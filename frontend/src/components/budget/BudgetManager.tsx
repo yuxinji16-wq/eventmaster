@@ -19,12 +19,15 @@ const BudgetManager: React.FC = () => {
 
   // 数据状态化
   const [logs, setLogs] = useState<BudgetLog[]>([]);
+  const currentYear = new Date().getFullYear().toString();
   const [yearlyQuota, setYearlyQuota] = useState<Record<string, number>>({
-    '2022': 1500000, '2023': 1800000, '2024': 2500000, '2025': 2800000
+    [currentYear]: 0,
+    [parseInt(currentYear) - 1]: 0,
+    [parseInt(currentYear) - 2]: 0,
   });
 
   // 视图状态
-  const [selectedYear, setSelectedYear] = useState('2024');
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'overview' | 'detail'>('overview');
   const [currentActivityId, setCurrentActivityId] = useState<string | null>(null);

@@ -6,7 +6,10 @@ import {
   Wallet,
   Users,
   TrendingUp,
-  ClipboardCheck
+  ClipboardCheck,
+  Settings,
+  Shield,
+  User
 } from 'lucide-react';
 import { Activity, ActivityStatus, Material, Supplier, Opportunity, BudgetLog, MediaPromotion, WechatArticle, Attachment, ExpenseItem, ReviewComment, Task, TaskPriority, TaskStatus, ReviewStatus, ReviewEvaluation, Review, ReviewFeedback, ReviewTag, PRESET_REVIEW_TAGS, SupplierReview, Budget, BudgetItem, BudgetStatus, BudgetCategory } from '../types';
 
@@ -18,6 +21,12 @@ export const NAV_ITEMS = [
   { id: 'suppliers', label: '供应商库', icon: <Users size={20} /> },
   { id: 'leads', label: '商机转化', icon: <TrendingUp size={20} /> },
   { id: 'reviews', label: '复盘中心', icon: <ClipboardCheck size={20} /> },
+];
+
+export const SYSTEM_NAV_ITEMS = [
+  { id: 'account', label: '账号管理', icon: <User size={20} />, path: '/account' },
+  { id: 'permissions', label: '权限管理', icon: <Shield size={20} />, path: '/permissions' },
+  { id: 'settings', label: '网站设置', icon: <Settings size={20} />, path: '/settings' },
 ];
 
 // 模拟复盘评论

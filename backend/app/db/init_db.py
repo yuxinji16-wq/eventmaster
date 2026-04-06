@@ -13,7 +13,7 @@ def init_db():
     os.makedirs(data_dir, exist_ok=True)
 
     # 导入所有模型以确保它们被注册
-    from app.models import activity, material, supplier, budget, opportunity, review
+    from app.models import activity, material, supplier, budget, opportunity, review, user, settings
 
     # 创建所有表
     Base.metadata.create_all(bind=engine)

@@ -60,9 +60,13 @@
 frontend/src/
 ├── pages/                    # 页面组件（路由级别）
 │   ├── Dashboard.tsx         # 数据仪表盘
+│   ├── Login.tsx            # 登录页
+│   ├── Account.tsx           # 账号管理
+│   ├── Permissions.tsx      # 权限管理
+│   ├── Settings.tsx         # 网站设置
 │   ├── ActivityDetail.tsx    # 活动详情
-│   ├── MaterialDetail.tsx    # 物料详情
-│   ├── SupplierDetail.tsx     # 供应商详情
+│   ├── MaterialDetail.tsx     # 物料详情
+│   ├── SupplierDetail.tsx    # 供应商详情
 │   ├── OpportunityDetail.tsx# 商机详情
 │   └── ReviewDetail.tsx      # 复盘详情
 ├── components/               # 业务组件（Manager 列表组件）
@@ -76,15 +80,18 @@ frontend/src/
 ├── shared/                   # 共享组件
 │   └── index.tsx            # Card, Button, Modal, Badge, StatCard
 ├── services/                 # API 服务
-│   ├── backendApi.ts         # 后端 API
+│   ├── backendApi.ts         # 后端 API（自动携带 JWT）
+│   ├── authApi.ts            # 认证 API
 │   └── geminiService.ts      # AI 服务
+├── context/                   # 状态管理
+│   └── AuthContext.tsx       # 认证状态管理
 ├── stores/                   # 状态管理
 │   └── AppContext.tsx        # 全局状态
 ├── utils/                    # 工具函数
 │   ├── routes.ts             # 路由配置（统一管理）
 │   └── storage.ts            # localStorage 存储
 ├── constants/                # 常量定义
-│   └── index.tsx            # NAV_ITEMS, MOCK_DATA
+│   └── index.tsx            # NAV_ITEMS, SYSTEM_NAV_ITEMS
 ├── types/                    # TypeScript 类型
 │   └── index.tsx
 ├── hooks/                    # 自定义 Hooks
@@ -106,6 +113,7 @@ frontend/src/
 // src/utils/routes.ts
 export const Routes = {
   HOME: '/',
+  LOGIN: '/login',
   ACTIVITIES: '/activities',
   ACTIVITY_DETAIL: '/activities/:id',
   MATERIALS: '/materials',
@@ -117,6 +125,9 @@ export const Routes = {
   OPPORTUNITY_DETAIL: '/opportunities/:id',
   REVIEWS: '/reviews',
   REVIEW_DETAIL: '/reviews/:id',
+  ACCOUNT: '/account',
+  PERMISSIONS: '/permissions',
+  SETTINGS: '/settings',
 };
 ```
 
@@ -177,7 +188,7 @@ boxShadow: {
 
 ### 3.1 API 设计
 
-**API 基础路径**: `/api/v1`
+**API 基础路径**: `/api`
 
 | 资源 | 端点 | 方法 | 说明 |
 |------|------|------|------|
@@ -189,24 +200,40 @@ boxShadow: {
 | 商机 | `/opportunities` | GET, POST | 商机管理 |
 | 复盘 | `/reviews` | GET, POST | 复盘管理 |
 | 仪表盘 | `/dashboard/stats` | GET | 仪表盘统计 |
+| 认证 | `/auth/login` | POST | 用户登录 |
+| 用户 | `/users` | GET, POST | 用户列表/创建 |
+| 角色 | `/roles` | GET, POST | 角色列表/创建 |
+| 设置 | `/settings` | GET, PUT | 网站设置 |
 
 ### 3.2 后端目录结构
 
 ```
 backend/
-├── main.py                 # 应用入口
-├── config.py               # 配置管理
-├── database.py             # 数据库连接
-├── models.py               # SQLAlchemy 模型
-├── schemas.py              # Pydantic 模式
-├── routers/
-│   ├── activities.py       # 活动路由
-│   ├── budget.py           # 预算路由
-│   ├── materials.py        # 物料路由
-│   ├── suppliers.py        # 供应商路由
-│   ├── opportunities.py    # 商机路由
-│   └── reviews.py          # 复盘路由
-└── data/                   # SQLite 数据目录
+├── app/
+│   ├── main.py                 # 应用入口
+│   ├── config.py               # 配置管理
+│   ├── routers/
+│   │   ├── activities.py       # 活动路由
+│   │   ├── budget.py          # 预算路由
+│   │   ├── materials.py       # 物料路由
+│   │   ├── suppliers.py       # 供应商路由
+│   │   ├── opportunities.py   # 商机路由
+│   │   ├── reviews.py         # 复盘路由
+│   │   ├── dashboard.py        # 仪表盘路由
+│   │   ├── auth.py            # 认证路由
+│   │   ├── users.py           # 用户管理路由
+│   │   ├── roles.py           # 角色权限路由
+│   │   └── settings.py        # 网站设置路由
+│   ├── models/
+│   │   ├── activity.py
+│   │   ├── budget.py
+│   │   ├── material.py
+│   │   ├── supplier.py
+│   │   ├── opportunity.py
+│   │   ├── review.py
+│   │   ├── user.py            # User, Role 模型
+│   │   └── settings.py        # SiteSettings 模型
+│   └── data/                   # SQLite 数据目录
 ```
 
 ---
@@ -278,3 +305,186 @@ cd backend
 pip install -r requirements.txt
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+---
+
+## 8. 账号权限模块
+
+### 8.1 模块概述
+
+账号权限模块实现细粒度模块权限控制，支持按用户/角色分配不同模块的查看/编辑/删除权限。
+
+### 8.2 数据模型
+
+#### User 模型
+```
+User:
+  - id: int (PK, 自增)
+  - username: str (唯一, 索引)
+  - email: str (唯一, 索引)
+  - password_hash: str
+  - is_active: bool (默认 true)
+  - is_superadmin: bool (默认 false)
+  - role_id: int (FK -> Role.id, 可为空)
+  - created_at: datetime
+  - updated_at: datetime
+```
+
+#### Role 模型
+```
+Role:
+  - id: int (PK, 自增)
+  - name: str (唯一) - 如"管理员"、"运营"、"查看者"
+  - description: str
+  - permissions: JSON - 权限规则
+  - is_default: bool (默认 false)
+  - created_at: datetime
+  - updated_at: datetime
+```
+
+#### Permission 权限结构 (JSON)
+```json
+{
+  "activities": {"view": true, "create": true, "edit": true, "delete": false},
+  "materials": {"view": true, "create": true, "edit": true, "delete": false},
+  "budget": {"view": true, "create": false, "edit": false, "delete": false},
+  "suppliers": {"view": true, "create": true, "edit": true, "delete": true},
+  "leads": {"view": true, "create": true, "edit": true, "delete": true},
+  "reviews": {"view": true, "create": true, "edit": false, "delete": false},
+  "account": {"view": true, "create": false, "edit": false, "delete": false},
+  "settings": {"view": false, "create": false, "edit": false, "delete": false}
+}
+```
+
+### 8.3 API 端点
+
+| 端点 | 方法 | 说明 | 权限 |
+|------|------|------|------|
+| `/auth/login` | POST | 用户登录 | 公开 |
+| `/auth/register` | POST | 注册用户 | 管理员 |
+| `/auth/me` | GET | 获取当前用户 | 需登录 |
+| `/users` | GET | 用户列表 | 管理员 |
+| `/users` | POST | 创建用户 | 管理员 |
+| `/users/{id}` | PUT | 更新用户 | 管理员 |
+| `/users/{id}` | DELETE | 删除用户 | 管理员 |
+| `/roles` | GET | 角色列表 | 管理员 |
+| `/roles` | POST | 创建角色 | 管理员 |
+| `/roles/{id}` | PUT | 更新角色权限 | 管理员 |
+| `/roles/{id}` | DELETE | 删除角色 | 管理员 |
+| `/permissions/me` | GET | 获取当前用户权限 | 需登录 |
+
+### 8.4 后端目录结构
+
+```
+backend/app/
+├── models/
+│   └── user.py           # User, Role 模型
+├── schemas/
+│   └── user.py           # User/Role Schema
+├── repositories/
+│   └── user.py           # UserRepository, RoleRepository
+├── services/
+│   └── user.py           # UserService, RoleService
+├── routers/
+│   ├── auth.py           # 认证路由
+│   ├── users.py          # 用户管理路由
+│   └── roles.py          # 角色权限路由
+└── core/
+    └── security.py       # JWT 工具函数
+```
+
+### 8.5 前端目录结构
+
+```
+frontend/src/
+├── pages/
+│   ├── Account.tsx       # 账号管理页面
+│   └── Permissions.tsx  # 权限管理页面
+├── components/
+│   ├── account/
+│   │   ├── AccountManager.tsx    # 账号管理组件
+│   │   └── PermissionMatrix.tsx  # 权限矩阵组件
+│   └── settings/
+│       └── SettingsPanel.tsx      # 设置面板组件
+├── services/
+│   └── authApi.ts        # 认证 API
+├── context/
+│   └── AuthContext.tsx   # 认证状态管理
+└── types/
+    └── index.tsx         # 新增 User, Role 类型
+```
+
+---
+
+## 9. 网站设置模块
+
+### 9.1 模块概述
+
+网站设置模块用于配置网站基础信息和邮件/通知设置。
+
+### 9.2 数据模型
+
+#### SiteSettings 模型
+```
+SiteSettings:
+  - id: int (PK, 自增)
+  - site_name: str (默认 "EventMaster Pro")
+  - site_logo: str (URL, 可为空)
+  - contact_email: str
+  - contact_phone: str
+  - address: str
+  - smtp_host: str
+  - smtp_port: int (默认 587)
+  - smtp_username: str
+  - smtp_password: str (加密存储)
+  - smtp_from_email: str
+  - email_template: Text
+  - created_at: datetime
+  - updated_at: datetime
+```
+
+### 9.3 API 端点
+
+| 端点 | 方法 | 说明 | 权限 |
+|------|------|------|------|
+| `/settings` | GET | 获取所有设置 | 管理员 |
+| `/settings` | PUT | 更新设置 | 管理员 |
+| `/settings/test-email` | POST | 发送测试邮件 | 管理员 |
+
+### 9.4 后端目录结构
+
+```
+backend/app/
+├── models/
+│   └── settings.py       # SiteSettings 模型
+├── schemas/
+│   └── settings.py       # SettingsSchema
+├── services/
+│   └── settings.py       # SettingsService
+└── routers/
+    └── settings.py       # 设置路由
+```
+
+---
+
+## 10. 安全设计
+
+### 10.1 密码存储
+- 使用 bcrypt 哈希算法
+- 每次哈希使用随机 salt
+- 不存储明文密码
+
+### 10.2 JWT Token
+- 算法: HS256
+- 过期时间: 24 小时
+- Payload: `{user_id, username, role_id, exp}`
+
+### 10.3 权限检查流程
+```
+请求 -> JWT验证 -> 获取用户 -> 获取角色 -> 检查权限 -> 允许/拒绝
+```
+
+### 10.4 敏感信息加密
+- SMTP 密码使用 Fernet 对称加密
+- 密钥存储在环境变量中
+

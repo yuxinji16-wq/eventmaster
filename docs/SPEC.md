@@ -19,6 +19,7 @@
 - 财务预算管理人员
 - 供应商对接人员
 - 活动执行团队成员
+- 管理员（系统配置）
 - 管理层决策者
 
 ---
@@ -34,8 +35,10 @@
 | 样式 | Tailwind CSS | 原子化CSS |
 | 路由 | React Router v6 | 路由管理 |
 | 图表 | Recharts | 数据可视化 |
+| 状态管理 | React Context | 认证状态 |
 | 后端框架 | FastAPI | 高性能API |
 | 数据库 | SQLite | 轻量级数据库 |
+| 认证 | JWT + bcrypt | 安全认证 |
 | AI服务 | Google Gemini | 智能分析 |
 
 ### 2.2 前端目录结构
@@ -44,6 +47,10 @@
 src/
 ├── pages/              # 页面组件（路由级别）
 │   ├── Dashboard.tsx         # 数据仪表盘
+│   ├── Login.tsx            # 登录页
+│   ├── Account.tsx          # 账号管理
+│   ├── Permissions.tsx      # 权限管理
+│   ├── Settings.tsx         # 网站设置
 │   ├── ActivityDetail.tsx   # 活动详情
 │   ├── MaterialDetail.tsx   # 物料详情
 │   ├── SupplierDetail.tsx   # 供应商详情
@@ -52,15 +59,18 @@ src/
 ├── components/         # 业务组件
 │   ├── activity/       # ActivityManager
 │   ├── material/       # MaterialManager
-│   ├── budget/        # BudgetManager
+│   ├── budget/         # BudgetManager
 │   ├── supplier/       # SupplierManager
 │   ├── opportunity/    # OpportunityManager
 │   ├── review/         # ReviewCenter
-│   └── layout/        # Layout, Sidebar
+│   └── layout/         # Layout, Sidebar
 ├── shared/             # 共享组件（Card, Button, Modal 等）
 ├── services/           # API 服务
 │   ├── backendApi.ts       # 后端 API
+│   ├── authApi.ts          # 认证 API
 │   └── geminiService.ts    # AI 服务
+├── context/            # 状态管理
+│   └── AuthContext.tsx     # 认证状态管理
 ├── utils/              # 工具函数
 │   ├── routes.ts           # 路由配置
 │   └── storage.ts          # localStorage 存储
@@ -82,6 +92,7 @@ src/
 - 卡片视图与日历视图切换
 - 按年份、月份、类型、状态筛选
 - 关键词搜索功能
+- 默认显示"所有年份"
 
 #### 3.1.3 活动详情扩展
 - 媒体宣传记录
@@ -150,6 +161,41 @@ src/
 - 月度预算/留资趋势图
 - 活动类型分布饼图
 
+### 3.8 账号管理模块
+
+#### 3.8.1 用户管理
+- 用户列表展示
+- 创建/编辑/删除用户
+- 用户名、邮箱、密码、角色分配
+- 账号状态启用/禁用
+
+#### 3.8.2 初始账号
+- 默认管理员: admin / admin123
+- 超级管理员权限
+
+### 3.9 权限管理模块
+
+#### 3.9.1 角色管理
+- 角色列表展示（含权限矩阵）
+- 创建/编辑/删除角色
+- 角色名称、描述
+
+#### 3.9.2 细粒度权限
+8个模块 × 4种操作：
+- 模块: activities, materials, budget, suppliers, leads, reviews, account, settings
+- 操作: view, create, edit, delete
+
+### 3.10 网站设置模块
+
+#### 3.10.1 基础信息
+- 网站名称、Logo
+- 联系邮箱、电话、地址
+
+#### 3.10.2 邮件服务配置
+- SMTP 服务器、端口、用户名、密码
+- 发件人邮箱
+- 测试邮件发送
+
 ---
 
 ## 4. 页面路由
@@ -158,6 +204,7 @@ src/
 
 | 路径 | 组件 | 说明 |
 |------|------|------|
+| `/login` | Login | 登录页 |
 | `/` | Dashboard | 数据仪表盘 |
 | `/activities` | ActivityManager | 活动列表 |
 | `/activities/:id` | ActivityDetail | 活动详情 |
@@ -170,6 +217,9 @@ src/
 | `/opportunities/:id` | OpportunityDetail | 商机详情 |
 | `/reviews` | ReviewCenter | 复盘列表 |
 | `/reviews/:id` | ReviewDetail | 复盘详情 |
+| `/account` | Account | 账号管理 |
+| `/permissions` | Permissions | 权限管理 |
+| `/settings` | Settings | 网站设置 |
 
 ### 4.2 导航结构
 
@@ -180,7 +230,11 @@ src/
 ├── 预算仓库 (BudgetManager)
 ├── 供应商库 (SupplierManager)
 ├── 商机转化 (OpportunityManager)
-└── 复盘中心 (ReviewCenter)
+├── 复盘中心 (ReviewCenter)
+└── 系统 (System)
+    ├── 账号管理 (Account)
+    ├── 权限管理 (Permissions)
+    └── 网站设置 (Settings)
 ```
 
 ---
@@ -242,3 +296,40 @@ src/
 - 媒体/推广
 - 人员费用
 - 其他
+
+---
+
+## 7. API 端点
+
+### 7.1 认证 API
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/auth/login` | POST | 用户登录 |
+| `/api/auth/register` | POST | 注册用户 |
+| `/api/auth/me` | GET | 获取当前用户 |
+
+### 7.2 用户 API
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/users` | GET | 用户列表 |
+| `/api/users` | POST | 创建用户 |
+| `/api/users/{id}` | GET | 用户详情 |
+| `/api/users/{id}` | PUT | 更新用户 |
+| `/api/users/{id}` | DELETE | 删除用户 |
+| `/api/users/permissions/me` | GET | 获取当前用户权限 |
+
+### 7.3 角色 API
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/roles` | GET | 角色列表 |
+| `/api/roles` | POST | 创建角色 |
+| `/api/roles/{id}` | GET | 角色详情 |
+| `/api/roles/{id}` | PUT | 更新角色 |
+| `/api/roles/{id}` | DELETE | 删除角色 |
+
+### 7.4 设置 API
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/settings` | GET | 获取设置 |
+| `/api/settings` | PUT | 更新设置 |
+| `/api/settings/test-email` | POST | 测试邮件发送 |

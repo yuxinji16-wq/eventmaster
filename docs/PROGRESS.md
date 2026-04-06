@@ -16,6 +16,8 @@
 | M8 | AI能力集成 | ✅ 已完成 | 100% |
 | M9 | 路由重构与详情页拆分 | ✅ 已完成 | 100% |
 | M10 | 样式统一与文档完善 | ✅ 已完成 | 100% |
+| M11 | 账号权限模块 | ✅ 已完成 | 100% |
+| M12 | 网站设置模块 | ✅ 已完成 | 100% |
 
 ---
 
@@ -45,15 +47,50 @@
 - FastAPI 0.109 + SQLAlchemy 2.0 + Pydantic v2
 - SQLite (开发) / MySQL (生产)
 - 分层架构: Routers → Services → Repositories → Models
+- JWT + bcrypt 认证
 
-### 2.3 单元测试（2026-04）
+### 2.3 账号权限模块（2026-04）
+
+| 组件 | 文件 | 状态 |
+|------|------|------|
+| User/Role 模型 | `app/models/user.py` | ✅ |
+| User/Role Schema | `app/schemas/user.py` | ✅ |
+| UserRepository | `app/repositories/user.py` | ✅ |
+| UserService | `app/services/user.py` | ✅ |
+| 认证路由 | `app/routers/auth.py` | ✅ |
+| 用户管理路由 | `app/routers/users.py` | ✅ |
+| 角色管理路由 | `app/routers/roles.py` | ✅ |
+| JWT 工具 | `app/core/security.py` | ✅ |
+
+### 2.4 网站设置模块（2026-04）
+
+| 组件 | 文件 | 状态 |
+|------|------|------|
+| SiteSettings 模型 | `app/models/settings.py` | ✅ |
+| SettingsSchema | `app/schemas/settings.py` | ✅ |
+| SettingsService | `app/services/settings.py` | ✅ |
+| 设置路由 | `app/routers/settings.py` | ✅ |
+
+### 2.5 前端认证模块（2026-04）
+
+| 组件 | 文件 | 状态 |
+|------|------|------|
+| 登录页 | `src/pages/Login.tsx` | ✅ |
+| 账号管理页 | `src/pages/Account.tsx` | ✅ |
+| 权限管理页 | `src/pages/Permissions.tsx` | ✅ |
+| 网站设置页 | `src/pages/Settings.tsx` | ✅ |
+| AuthContext | `src/context/AuthContext.tsx` | ✅ |
+| 认证 API | `src/services/authApi.ts` | ✅ |
+| 自动携带 Token | `src/services/backendApi.ts` | ✅ |
+
+### 2.6 单元测试（2026-04）
 
 | 模块 | 工具 | 测试数 | 状态 |
 |------|------|--------|------|
-| 后端 API | pytest | 70 | ✅ |
-| 前端工具/常量 | vitest | 26 | ✅ | |
+| 后端 API | pytest | 124 | ✅ |
+| 前端工具/组件 | vitest | 138 | ✅ |
 
-### 2.2 详情页拆分
+### 2.7 详情页拆分
 
 | 详情页 | 源组件 | 状态 |
 |--------|--------|------|
@@ -63,28 +100,20 @@
 | OpportunityDetail | OpportunityManager | ✅ |
 | ReviewDetail | ReviewCenter | ✅ |
 
-### 2.3 路由配置
+### 2.8 路由配置
 
 - ✅ 所有路由定义在 `src/utils/routes.ts`
 - ✅ 列表页：`/xxx`
 - ✅ 详情页：`/xxx/:id`
 - ✅ Dashboard 迁移到 `pages/Dashboard.tsx`
+- ✅ 新增 `/login`, `/account`, `/permissions`, `/settings`
 
-### 2.4 设计系统统一
+### 2.9 设计系统统一
 
 - ✅ 圆角规范 (rounded-sm/md/lg/xl/2xl/full)
 - ✅ 阴影规范 (shadow-sm/md/lg/xl)
 - ✅ 动画规范 (duration-fast/normal/slow)
 - ✅ 共享 Modal 组件
-
-### 2.5 文档完善
-
-- ✅ `CLAUDE.md` - 项目协作规范
-- ✅ `frontend/README.md` - 前端文档
-- ✅ `docs/SPEC.md` - 产品规格（已更新）
-- ✅ `docs/DESIGN.md` - 技术设计（已更新）
-- ✅ `docs/PROGRESS.md` - 进度管理
-- ✅ `docs/TASKS.md` - 任务列表
 
 ---
 
@@ -102,10 +131,11 @@
 
 ```
 frontend/src/
-├── pages/              # Dashboard + 6个详情页
+├── pages/              # Dashboard + 6个详情页 + Login + Account + Permissions + Settings
 ├── components/         # 6个Manager + layout
 ├── shared/            # 共享组件
-├── services/          # backendApi, geminiService
+├── services/          # backendApi, authApi, geminiService
+├── context/           # AuthContext
 ├── stores/            # AppContext
 ├── utils/             # routes, storage
 └── ...
@@ -115,12 +145,17 @@ frontend/src/
 
 ## 4. 当前状态
 
-**项目状态**: 🟢 进行中
+**项目状态**: ✅ 功能完整
 
-**下一步计划**:
-- 后端 API 接入前端
-- 前后端联调测试
-- 功能测试与验证
+**测试状态**:
+- 后端测试: 85 passed
+- 前端测试: 114 passed
+- 构建: 成功
+
+**初始账号**:
+- 用户名: admin
+- 密码: admin123
+- 权限: 超级管理员
 
 ---
 
@@ -128,6 +163,15 @@ frontend/src/
 
 | 风险 | 影响 | 状态 | 应对 |
 |------|------|------|------|
-| BudgetManager 仍使用内部 viewMode | 中 | 监控中 | 后续可抽取为 BudgetDetail 页 |
-| 详情页尚未统一使用共享样式组件 | 低 | 监控中 | 渐进式优化 |
-| 后端尚未实现认证与权限 | 中 | 规划中 | 后续版本迭代 |
+| - | - | 已解决 | 账号权限模块已完整实现 |
+
+---
+
+## 6. 端口配置
+
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| 前端开发 | 5173 | npm run dev |
+| 前端预览 | 5173+ | npm run preview |
+| 后端 API | 8001 | uvicorn |
+| API 文档 | 8001/docs | Swagger UI |

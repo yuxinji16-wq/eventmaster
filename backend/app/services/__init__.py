@@ -7,6 +7,7 @@ from app.services.supplier import SupplierService, SupplierReviewService, BillSe
 from app.services.budget import BudgetService, BudgetItemService, BudgetLogService, YearlyQuotaService
 from app.services.opportunity import OpportunityService
 from app.services.review import ReviewService, ReviewFeedbackService, ReviewConclusionService
+from app.services.user import UserService, RoleService
 
 __all__ = [
     "ActivityService",
@@ -24,4 +25,6 @@ __all__ = [
     "ReviewService",
     "ReviewFeedbackService",
     "ReviewConclusionService",
+    "UserService",
+    "RoleService",
 ]

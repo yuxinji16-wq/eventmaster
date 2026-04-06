@@ -12,6 +12,7 @@ from app.schemas.supplier import (
 )
 from app.services.supplier import SupplierService, SupplierReviewService, BillService
 from app.core.errors import SupplierException, NotFoundException
+from app.models.activity import Activity
 
 router = APIRouter(prefix="/suppliers", tags=["供应商"])
 supplier_service = SupplierService()
@@ -88,6 +89,28 @@ def create_supplier_review(data: SupplierReviewCreate, db: Session = Depends(get
     return review_service.create(db, data.model_dump())
 
 
+# 简化的评价创建（接受前端格式）
+@router.post("/{supplier_id}/reviews", response_model=SupplierReviewResponse)
+def create_supplier_review_simple(
+    supplier_id: int,
+    data: dict,  # {content, rating}
+    db: Session = Depends(get_db)
+):
+    """简化创建供应商评价（前端调用）"""
+    # 从单一 rating 计算各维度评分
+    rating = data.get('rating', 0)
+    review_data = {
+        'supplier_id': supplier_id,
+        'quality_score': rating,
+        'delivery_score': rating,
+        'service_score': rating,
+        'price_score': rating,
+        'overall_score': rating,
+        'comments': data.get('content', ''),
+    }
+    return review_service.create(db, review_data)
+
+
 @router.get("/{supplier_id}/avg-score")
 def get_supplier_avg_score(supplier_id: int, db: Session = Depends(get_db)):
     """获取供应商平均评分"""
@@ -111,6 +134,33 @@ def list_supplier_bills(
 def create_bill(data: BillCreate, db: Session = Depends(get_db)):
     """创建账单"""
     return bill_service.create(db, data.model_dump())
+
+
+# 简化的账单创建（接受前端格式）
+@router.post("/{supplier_id}/bills", response_model=BillResponse)
+def create_bill_simple(
+    supplier_id: int,
+    data: dict,  # {activityName, projectName, amount, status, date}
+    db: Session = Depends(get_db)
+):
+    """简化创建账单（前端调用）"""
+    # 尝试通过活动名称查找 activity_id
+    activity_name = data.get('activityName', '')
+    activity_id = None
+    if activity_name:
+        activity = db.query(Activity).filter(Activity.name == activity_name).first()
+        if activity:
+            activity_id = activity.id
+
+    bill_data = {
+        'supplier_id': supplier_id,
+        'activity_id': activity_id,
+        'amount': data.get('amount', 0),
+        'status': data.get('status', '待付款'),
+        'due_date': data.get('date'),
+        'notes': data.get('projectName', ''),
+    }
+    return bill_service.create(db, bill_data)
 
 
 @router.put("/bills/{bill_id}/paid", response_model=BillResponse)

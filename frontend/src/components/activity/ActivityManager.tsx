@@ -28,7 +28,7 @@ const ActivityManager: React.FC = () => {
   const { opportunities } = useOpportunitiesData();
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [yearFilter, setYearFilter] = useState('2024');
+  const [yearFilter, setYearFilter] = useState('所有年份');
   const [categoryFilter, setCategoryFilter] = useState('所有分类');
   const [statusFilter, setStatusFilter] = useState('所有状态');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -46,6 +46,23 @@ const ActivityManager: React.FC = () => {
       return matchesSearch && matchesYear && matchesCategory && matchesStatus;
     });
   }, [activities, searchQuery, yearFilter, categoryFilter, statusFilter]);
+
+  // 从活动数据中动态获取所有可用年份
+  const availableYears = useMemo(() => {
+    const years = new Set<string>();
+    activities.forEach(a => { if (a.year) years.add(a.year); });
+    // 确保包含当前年份及前后一年
+    const currentYear = new Date().getFullYear().toString();
+    years.add(currentYear);
+    years.add((parseInt(currentYear) - 1).toString());
+    years.add((parseInt(currentYear) + 1).toString());
+    return Array.from(years).sort((a, b) => parseInt(b) - parseInt(a));
+  }, [activities]);
+
+  const yearOptions = useMemo(() => [
+    { label: '所有年份', value: '所有年份' },
+    ...availableYears.map(y => ({ label: `${y} 年度`, value: y }))
+  ], [availableYears]);
 
   const activitiesByMonth = useMemo(() => {
     const grouped: { [key: number]: Activity[] } = {};
@@ -139,7 +156,7 @@ const ActivityManager: React.FC = () => {
           <input type="text" placeholder="搜索活动..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-12 pr-4 py-2.5 bg-slate-50 border-2 border-transparent rounded-xl focus:bg-white focus:border-indigo-500 outline-none font-bold text-slate-700" />
         </div>
         <div className="flex flex-wrap gap-2">
-          <FilterDropdown value={yearFilter} onChange={setYearFilter} options={[{label: '所有年份', value: '所有年份'}, {label: '2024 年度', value: '2024'}, {label: '2025 年度', value: '2025'}, {label: '2023 年度', value: '2023'}]} />
+          <FilterDropdown value={yearFilter} onChange={setYearFilter} options={yearOptions} />
           <FilterDropdown value={categoryFilter} onChange={setCategoryFilter} options={[{label: '所有分类', value: '所有分类'}, {label: '自办活动', value: '自办活动'}, {label: '外部市场活动', value: '外部市场活动'}]} />
           <FilterDropdown value={statusFilter} onChange={setStatusFilter} options={[{label: '所有状态', value: '所有状态'}, ...Object.values(ActivityStatus).map(s => ({label: s, value: s}))]} />
         </div>

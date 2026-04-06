@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useOpportunitiesData, useActivitiesData } from '../../utils/hooks';
 import { Opportunity } from '../../types';
@@ -27,8 +27,20 @@ const OpportunityManager: React.FC = () => {
   const [showNewModal, setShowNewModal] = useState<boolean>(false);
   const [editingOpportunity, setEditingOpportunity] = useState<Opportunity | null>(null);
 
-  const years = ['全部', '2025', '2024', '2023'];
   const statuses = ['所有状态', '高意向', '中意向', '低意向'];
+
+  // 动态获取所有可用年份
+  const availableYears = useMemo(() => {
+    const years = new Set<string>();
+    opportunities.forEach(o => {
+      const year = o.createDate.split('-')[0];
+      if (year) years.add(year);
+    });
+    const currentYear = new Date().getFullYear().toString();
+    years.add(currentYear);
+    years.add((parseInt(currentYear) - 1).toString());
+    return Array.from(years).sort((a, b) => parseInt(b) - parseInt(a));
+  }, [opportunities]);
 
   const getEventName = (id: string) => activities.find(a => a.id === id)?.name || '未知活动';
 
@@ -155,8 +167,9 @@ const OpportunityManager: React.FC = () => {
               value={selectedYear}
               onChange={(e) => setSelectedYear(e.target.value)}
             >
-              {years.map(year => (
-                <option key={year} value={year}>{year === '全部' ? '全部年份' : year + '年'}</option>
+              <option value="全部">全部年份</option>
+              {availableYears.map(year => (
+                <option key={year} value={year}>{year} 年</option>
               ))}
             </select>
             <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover:text-indigo-500 transition-colors" size={16} />

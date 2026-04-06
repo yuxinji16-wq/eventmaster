@@ -7,6 +7,8 @@ from app.models.supplier import Supplier, SupplierReview, Bill
 from app.models.budget import Budget, BudgetItem, BudgetLog, YearlyQuota
 from app.models.opportunity import Opportunity
 from app.models.review import Review, ReviewFeedback, ReviewConclusion
+from app.models.user import User, Role
+from app.models.settings import SiteSettings
 
 __all__ = [
     "Activity",
@@ -24,4 +26,7 @@ __all__ = [
     "Review",
     "ReviewFeedback",
     "ReviewConclusion",
+    "User",
+    "Role",
+    "SiteSettings",
 ]

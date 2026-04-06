@@ -14,7 +14,11 @@ from app.routers import (
     budget_router,
     opportunity_router,
     review_router,
-    dashboard_router
+    dashboard_router,
+    auth_router,
+    users_router,
+    roles_router,
+    settings_router,
 )
 
 app = FastAPI(
@@ -52,6 +56,10 @@ app.include_router(budget_router, prefix="/api")
 app.include_router(opportunity_router, prefix="/api")
 app.include_router(review_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
+app.include_router(auth_router, prefix="/api")
+app.include_router(users_router, prefix="/api")
+app.include_router(roles_router, prefix="/api")
+app.include_router(settings_router, prefix="/api")
 
 
 @app.get("/")

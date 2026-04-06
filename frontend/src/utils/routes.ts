@@ -29,6 +29,16 @@ export const AppRoutes = {
   // 复盘管理
   REVIEWS: '/reviews',
   REVIEW_DETAIL: '/reviews/:id',
+
+  // 账号与权限
+  ACCOUNT: '/account',
+  PERMISSIONS: '/permissions',
+
+  // 系统设置
+  SETTINGS: '/settings',
+
+  // 登录
+  LOGIN: '/login',
 } as const;
 
 // 路由元数据（可用于权限控制、面包屑等）
@@ -51,6 +61,10 @@ export const RouteMetaMap: Record<string, RouteMeta> = {
   [AppRoutes.OPPORTUNITY_DETAIL]: { label: '商机详情', breadcrumb: ['商机管理', '详情'] },
   [AppRoutes.REVIEWS]: { label: '复盘中心', breadcrumb: ['复盘管理'] },
   [AppRoutes.REVIEW_DETAIL]: { label: '复盘详情', breadcrumb: ['复盘管理', '详情'] },
+  [AppRoutes.ACCOUNT]: { label: '账号管理', breadcrumb: ['系统管理'] },
+  [AppRoutes.PERMISSIONS]: { label: '权限管理', breadcrumb: ['系统管理'] },
+  [AppRoutes.SETTINGS]: { label: '网站设置', breadcrumb: ['系统管理'] },
+  [AppRoutes.LOGIN]: { label: '登录', breadcrumb: [] },
 };
 
 export type RoutePath = typeof AppRoutes[keyof typeof AppRoutes];

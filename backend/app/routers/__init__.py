@@ -8,6 +8,10 @@ from app.routers.budget import router as budget_router
 from app.routers.opportunity import router as opportunity_router
 from app.routers.review import router as review_router
 from app.routers.dashboard import router as dashboard_router
+from app.routers.auth import router as auth_router
+from app.routers.users import router as users_router
+from app.routers.roles import router as roles_router
+from app.routers.settings import router as settings_router
 
 __all__ = [
     "activity_router",
@@ -17,4 +21,8 @@ __all__ = [
     "opportunity_router",
     "review_router",
     "dashboard_router",
+    "auth_router",
+    "users_router",
+    "roles_router",
+    "settings_router",
 ]

@@ -614,7 +614,7 @@ export function useBudgetData() {
     setError(null);
     try {
       const data = await budgetApi.getActivities(year);
-      setActivitiesWithBudget(data);
+      setActivitiesWithBudget(data.activities);
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取活动预算失败');
       console.error('Failed to fetch activities with budget:', err);

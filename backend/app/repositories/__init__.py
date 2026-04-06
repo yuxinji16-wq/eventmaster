@@ -7,6 +7,7 @@ from app.repositories.supplier import SupplierRepository, SupplierReviewReposito
 from app.repositories.budget import BudgetRepository, BudgetItemRepository, BudgetLogRepository, YearlyQuotaRepository
 from app.repositories.opportunity import OpportunityRepository
 from app.repositories.review import ReviewRepository, ReviewFeedbackRepository, ReviewConclusionRepository
+from app.repositories.user import UserRepository, RoleRepository
 
 __all__ = [
     "ActivityRepository",
@@ -24,4 +25,6 @@ __all__ = [
     "ReviewRepository",
     "ReviewFeedbackRepository",
     "ReviewConclusionRepository",
+    "UserRepository",
+    "RoleRepository",
 ]
