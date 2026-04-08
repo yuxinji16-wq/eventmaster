@@ -507,284 +507,209 @@ function SupplierModal({ onClose, onSave }: { onClose: () => void; onSave: (data
 }
 
 function MaterialModal({ onClose, onSave }: { onClose: () => void; onSave: (data: any) => void }) {
-  const [step, setStep] = useState<'category' | 'search' | 'create'>('category');
-  const [selectedCategory, setSelectedCategory] = useState('');
   const [search, setSearch] = useState('');
-  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [materials, setMaterials] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedMaterial, setSelectedMaterial] = useState<any>(null);
   const [withdrawCount, setWithdrawCount] = useState(1);
-  const [searching, setSearching] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  // 新增物料表单
-  const [newMaterial, setNewMaterial] = useState({
-    name: '',
-    category: '',
-    unit: '个',
-    stock: 0,
-  });
+  // 加载物料列表
+  useEffect(() => {
+    loadMaterials();
+  }, [categoryFilter]);
 
-  // 按分类搜索物料
-  const handleSearchByCategory = async (category: string, query: string = '') => {
-    setSelectedCategory(category);
-    setSearching(true);
+  const loadMaterials = async () => {
+    setLoading(true);
     try {
-      const params: any = { category };
-      if (query) params.search = query;
+      const params: any = {};
+      if (categoryFilter) params.category = categoryFilter;
+      if (search) params.search = search;
       const response = await materialsApi.getList(params);
-      setSearchResults(response.materials || []);
+      setMaterials(response.materials || []);
     } catch (err) {
-      console.error('Search failed:', err);
-      setSearchResults([]);
+      console.error('加载物料失败:', err);
+      setMaterials([]);
     } finally {
-      setSearching(false);
+      setLoading(false);
     }
-    setStep('search');
   };
 
-  // 搜索物料
-  const handleSearch = async (query: string) => {
-    setSearch(query);
-    if (query.length < 1) {
-      setSearchResults([]);
-      return;
-    }
-    setSearching(true);
-    try {
-      const params: any = { category: selectedCategory };
-      if (query) params.search = query;
-      const response = await materialsApi.getList(params);
-      setSearchResults(response.materials || []);
-    } catch (err) {
-      console.error('Search failed:', err);
-      setSearchResults([]);
-    } finally {
-      setSearching(false);
-    }
+  // 搜索处理（防抖）
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (search || categoryFilter) {
+        loadMaterials();
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search, categoryFilter]);
+
+  // 计算库存状态
+  const getStockStatus = (stock: number) => {
+    if (stock === 0) return { label: '缺货', color: 'bg-rose-100 text-rose-600' };
+    if (stock <= 10) return { label: '预警', color: 'bg-amber-100 text-amber-600' };
+    return { label: '充足', color: 'bg-emerald-100 text-emerald-600' };
   };
 
   // 选择物料
   const handleSelectMaterial = (material: any) => {
     setSelectedMaterial(material);
-    setSearch(material.name);
     setWithdrawCount(1);
   };
 
-  // 返回分类选择
-  const handleBackToCategory = () => {
-    setStep('category');
-    setSelectedCategory('');
-    setSearch('');
-    setSearchResults([]);
+  // 取消选择
+  const handleCancelSelect = () => {
     setSelectedMaterial(null);
+    setWithdrawCount(1);
   };
 
-  // 返回搜索
-  const handleBackToSearch = () => {
-    setStep('search');
-    setSelectedMaterial(null);
-    setSearch('');
-  };
-
-  // 提交领用
-  const handleSubmit = () => {
-    if (!selectedMaterial || withdrawCount < 1) return;
-    onSave({
-      type: 'withdraw',
-      warehouseId: selectedMaterial.id,
-      name: selectedMaterial.name,
-      category: selectedMaterial.category,
-      count: withdrawCount,
-      unit: selectedMaterial.unit || '个',
-      warehouseStock: selectedMaterial.stock,
-    });
-    onClose();
-  };
-
-  // 创建新物料
-  const handleCreateMaterial = () => {
-    setNewMaterial({ name: search, category: selectedCategory, unit: '个', stock: 0 });
-    setStep('create');
-  };
-
-  // 提交创建
-  const handleSubmitCreate = () => {
-    if (!newMaterial.name || !selectedCategory) return;
-    onSave({
-      type: 'create',
-      name: newMaterial.name,
-      category: selectedCategory,
-      unit: newMaterial.unit,
-      count: newMaterial.stock,
-      isNewMaterial: true,
-    });
-    onClose();
+  // 确认领用
+  const handleSubmit = async () => {
+    if (!selectedMaterial || withdrawCount < 1 || withdrawCount > selectedMaterial.stock) return;
+    setSubmitting(true);
+    try {
+      await materialsApi.withdraw(selectedMaterial.id, {
+        count: withdrawCount,
+        user: '活动领用',
+        reason: `活动物料领用: ${selectedMaterial.name}`,
+      });
+      onSave({
+        warehouseId: selectedMaterial.id,
+        name: selectedMaterial.name,
+        category: selectedMaterial.category,
+        count: withdrawCount,
+        unit: selectedMaterial.unit || '个',
+        warehouseStock: selectedMaterial.stock,
+      });
+      toast.success(`已从仓库领用 ${withdrawCount} ${selectedMaterial.unit} "${selectedMaterial.name}"`);
+      onClose();
+    } catch (err) {
+      console.error('领用失败:', err);
+      toast.error('领用失败，请重试');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
-    <Modal title="物料领用" onClose={onClose} size="md">
+    <Modal title="物料领用" onClose={onClose} size="lg">
       <div className="space-y-4">
-        {/* 步骤1：选择大类 */}
-        {step === 'category' && (
-          <>
-            <div>
-              <label className="text-xs font-bold text-slate-500 uppercase mb-3 block">选择物料大类</label>
-              <div className="grid grid-cols-2 gap-3">
-                {MATERIAL_CATEGORIES.map(cat => (
-                  <button
-                    key={cat.value}
-                    onClick={() => handleSearchByCategory(cat.value)}
-                    className="p-4 border-2 border-slate-200 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 transition-all text-left"
-                  >
-                    <span className="font-bold text-slate-700">{cat.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* 步骤2：搜索并选择具体物料 */}
-        {step === 'search' && (
-          <>
-            <div className="flex items-center gap-2 mb-2">
-              <button onClick={handleBackToCategory} className="text-slate-400 hover:text-slate-600">
-                <ArrowLeft size={16} />
-              </button>
-              <span className="text-xs font-bold text-indigo-600 uppercase">{selectedCategory}</span>
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-slate-500 uppercase">搜索具体物料</label>
+        {/* 顶部：搜索 + 分类筛选 */}
+        {!selectedMaterial && (
+          <div className="flex gap-3">
+            <div className="flex-1">
               <Input
                 value={search}
-                onChange={e => { setSearch(e.target.value); handleSearch(e.target.value); }}
-                placeholder="输入物料名称搜索"
+                onChange={e => setSearch(e.target.value)}
+                placeholder="搜索物料名称..."
               />
-              {searching && <div className="text-xs text-slate-400 mt-1">搜索中...</div>}
             </div>
-
-            {/* 物料列表 */}
-            {searchResults.length > 0 && (
-              <div className="border border-slate-200 rounded-lg max-h-52 overflow-y-auto">
-                {searchResults.map(m => (
-                  <div
-                    key={m.id}
-                    onClick={() => handleSelectMaterial(m)}
-                    className={`px-3 py-2.5 cursor-pointer flex justify-between items-center border-b border-slate-100 last:border-b-0 ${selectedMaterial?.id === m.id ? 'bg-indigo-100' : 'hover:bg-indigo-50'}`}
-                  >
-                    <div>
-                      <span className="font-medium text-slate-800">{m.name}</span>
-                    </div>
-                    <span className="text-xs text-slate-500">库存: {m.stock} {m.unit}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* 无搜索结果 */}
-            {!searching && search.length > 0 && searchResults.length === 0 && (
-              <div className="border border-dashed border-slate-300 rounded-lg p-4 text-center">
-                <p className="text-sm text-slate-500 mb-3">没有找到 "{search}"</p>
-                <Button variant="primary" size="sm" onClick={handleCreateMaterial} icon={<Plus size={14} />}>
-                  创建新物料
-                </Button>
-              </div>
-            )}
-
-            {/* 选中物料后填写数量 */}
-            {selectedMaterial && (
-              <div className="border-t border-slate-200 pt-4 mt-4">
-                <div className="bg-indigo-50 rounded-lg p-3 mb-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-bold text-indigo-800">{selectedMaterial.name}</p>
-                      <p className="text-xs text-indigo-600">当前库存: {selectedMaterial.stock} {selectedMaterial.unit}</p>
-                    </div>
-                    <button onClick={handleBackToSearch} className="text-indigo-400 hover:text-indigo-600">
-                      <X size={16} />
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase">领用数量 *</label>
-                  <Input
-                    type="number"
-                    value={withdrawCount}
-                    onChange={e => setWithdrawCount(Math.max(1, Math.min(selectedMaterial.stock, +e.target.value)))}
-                    min={1}
-                    max={selectedMaterial.stock}
-                  />
-                  {withdrawCount > selectedMaterial.stock && (
-                    <p className="text-xs text-rose-500 mt-1">超过库存数量（{selectedMaterial.stock}）</p>
-                  )}
-                </div>
-
-                <div className="flex justify-end gap-2 mt-6">
-                  <Button variant="ghost" onClick={onClose}>取消</Button>
-                  <Button variant="primary" onClick={handleSubmit} disabled={withdrawCount < 1}>确认领用</Button>
-                </div>
-              </div>
-            )}
-          </>
+            <div className="w-40">
+              <Select
+                value={categoryFilter}
+                onChange={e => setCategoryFilter(e.target.value)}
+                options={[{ value: '', label: '全部分类' }, ...MATERIAL_CATEGORIES]}
+              />
+            </div>
+          </div>
         )}
 
-        {/* 步骤3：创建新物料 */}
-        {step === 'create' && (
-          <>
-            <div className="flex items-center gap-2 mb-2">
-              <button onClick={handleBackToSearch} className="text-slate-400 hover:text-slate-600">
-                <ArrowLeft size={16} />
-              </button>
-              <span className="text-xs font-bold text-indigo-600 uppercase">{selectedCategory}</span>
-            </div>
-
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
-              <p className="text-sm text-amber-800 font-medium">创建新物料</p>
-              <p className="text-xs text-amber-600 mt-1">物料 "{search}" 不存在于此分类中，将创建新物料</p>
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-slate-500 uppercase">物料名称 *</label>
-              <Input
-                value={newMaterial.name}
-                onChange={e => setNewMaterial({...newMaterial, name: e.target.value})}
-                placeholder="输入物料名称"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase">单位</label>
-                <Input
-                  value={newMaterial.unit}
-                  onChange={e => setNewMaterial({...newMaterial, unit: e.target.value})}
-                  placeholder="个/本/套"
-                />
+        {/* 物料列表 */}
+        {!selectedMaterial && (
+          <div className="border border-slate-200 rounded-lg max-h-80 overflow-y-auto">
+            {loading ? (
+              <div className="p-8 text-center text-slate-400">
+                <Loader2 className="animate-spin mx-auto mb-2" size={24} />
+                <p className="text-sm">加载中...</p>
               </div>
+            ) : materials.length === 0 ? (
+              <div className="p-8 text-center text-slate-400">
+                <Package size={32} className="mx-auto mb-2 opacity-50" />
+                <p className="text-sm">暂无物料数据</p>
+              </div>
+            ) : (
+              materials.map(m => {
+                const status = getStockStatus(m.stock);
+                return (
+                  <div
+                    key={m.id}
+                    onClick={() => m.stock > 0 && handleSelectMaterial(m)}
+                    className={`px-4 py-3 flex justify-between items-center border-b border-slate-100 last:border-b-0 cursor-pointer transition-colors ${
+                      m.stock > 0 ? 'hover:bg-indigo-50' : 'opacity-50 cursor-not-allowed'
+                    }`}
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-800">{m.name}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${status.color}`}>{status.label}</span>
+                      </div>
+                      <div className="text-xs text-slate-400 mt-0.5">{m.category}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-bold text-slate-700">
+                        库存: <span className={m.stock <= 10 ? 'text-amber-600' : 'text-emerald-600'}>{m.stock}</span> {m.unit}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+
+        {/* 选中物料后：填写领用数量 */}
+        {selectedMaterial && (
+          <div className="border-2 border-indigo-200 rounded-lg p-4 bg-indigo-50">
+            <div className="flex justify-between items-start mb-4">
               <div>
-                <label className="text-xs font-bold text-slate-500 uppercase">初始库存</label>
+                <p className="font-bold text-indigo-800 text-lg">{selectedMaterial.name}</p>
+                <p className="text-sm text-indigo-600">{selectedMaterial.category}</p>
+              </div>
+              <button onClick={handleCancelSelect} className="text-indigo-400 hover:text-indigo-600">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="bg-white rounded-lg p-3 text-center">
+                <p className="text-xs text-slate-400 uppercase font-bold">当前库存</p>
+                <p className={`text-2xl font-black ${selectedMaterial.stock <= 10 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                  {selectedMaterial.stock}
+                </p>
+                <p className="text-xs text-slate-400">{selectedMaterial.unit}</p>
+              </div>
+              <div className="bg-white rounded-lg p-3 text-center">
+                <p className="text-xs text-slate-400 uppercase font-bold">领用数量</p>
                 <Input
                   type="number"
-                  value={newMaterial.stock}
-                  onChange={e => setNewMaterial({...newMaterial, stock: Math.max(0, +e.target.value)})}
-                  min={0}
+                  value={withdrawCount}
+                  onChange={e => setWithdrawCount(Math.max(1, Math.min(selectedMaterial.stock, +e.target.value)))}
+                  min={1}
+                  max={selectedMaterial.stock}
+                  className="text-center text-xl font-bold"
                 />
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 mt-6">
-              <Button variant="ghost" onClick={handleBackToSearch}>返回</Button>
+            {withdrawCount > selectedMaterial.stock && (
+              <div className="text-center text-rose-500 text-sm mb-3">
+                领用数量不能超过当前库存（{selectedMaterial.stock}）
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={onClose}>取消</Button>
               <Button
                 variant="primary"
-                onClick={handleSubmitCreate}
-                disabled={!newMaterial.name}
+                onClick={handleSubmit}
+                disabled={withdrawCount < 1 || withdrawCount > selectedMaterial.stock || submitting}
               >
-                创建并领用
+                {submitting ? '提交中...' : '确认领用'}
               </Button>
             </div>
-          </>
+          </div>
         )}
       </div>
     </Modal>
@@ -1714,69 +1639,21 @@ const ActivityDetail: React.FC = () => {
   };
 
   // 物料操作
-  const handleAddMaterial = async (data: any) => {
-    if (data.type === 'withdraw' && data.warehouseId && data.count) {
-      // 领用已有物料
-      try {
-        await materialsApi.withdraw(data.warehouseId, {
-          count: data.count,
-          user: '活动领用',
-          reason: `活动物料领用: ${data.name}`,
-        });
-        toast.success(`已从仓库领用 ${data.count} ${data.unit} "${data.name}"`);
-      } catch (err) {
-        console.error('领用失败:', err);
-        toast.error('仓库领用失败');
-        return;
-      }
-      // 更新本地状态
-      const newMaterial = {
-        id: `mat-${Date.now()}`,
-        name: data.name,
-        category: data.category,
-        type: '领用',
-        stock: data.count,
-        unit: data.unit,
-        status: 'In Stock',
-        usageCount: 0,
-        lastUpdated: new Date().toISOString(),
-        warehouseId: data.warehouseId,
-      };
-      setMaterials(prev => [...prev, newMaterial]);
-    } else if (data.isNewMaterial) {
-      // 创建新物料到仓库
-      try {
-        // 1. 创建物料（初始库存即领用数量）
-        await materialsApi.create({
-          name: data.name,
-          category: data.category,
-          unit: data.unit,
-          stock: data.count,
-          location: '',
-          contact: '',
-          supplier: '',
-        });
-        toast.success(`物料 "${data.name}" 已创建到仓库（库存 ${data.count} ${data.unit}）`);
-      } catch (err) {
-        console.error('创建物料失败:', err);
-        toast.error('创建物料失败');
-        return;
-      }
-      // 更新本地状态
-      const newMaterial = {
-        id: `mat-${Date.now()}`,
-        name: data.name,
-        category: data.category,
-        type: '新增',
-        stock: data.count,
-        unit: data.unit,
-        status: 'In Stock',
-        usageCount: 0,
-        lastUpdated: new Date().toISOString(),
-        warehouseId: null,
-      };
-      setMaterials(prev => [...prev, newMaterial]);
-    }
+  const handleAddMaterial = (data: any) => {
+    // API调用已在MaterialModal中完成，这里只更新本地状态
+    const newMaterial = {
+      id: `mat-${Date.now()}`,
+      name: data.name,
+      category: data.category,
+      type: '领用',
+      stock: data.count,
+      unit: data.unit,
+      status: 'In Stock',
+      usageCount: 0,
+      lastUpdated: new Date().toISOString(),
+      warehouseId: data.warehouseId,
+    };
+    setMaterials(prev => [...prev, newMaterial]);
   };
   const handleMaterialStatusChange = (materialId: string, status: string) => {
     setMaterials(prev => prev.map(m => m.id === materialId ? { ...m, status } : m));
