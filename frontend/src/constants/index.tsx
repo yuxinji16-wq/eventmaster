@@ -940,4 +940,21 @@ export const MOCK_REVIEWS: Review[] = [
   }
 ];
 
+// ==================== 活动行业分类 ====================
+export const ACTIVITY_INDUSTRIES = [
+  '航天',
+  '航空',
+  '车辆',
+  '船舶',
+  '电子信息',
+  '芯片电子',
+  '电力能源',
+  '核能',
+  '高校',
+  '政府',
+  '综合',
+] as const;
+
+export type ActivityIndustry = typeof ACTIVITY_INDUSTRIES[number];
+
 export { PRESET_REVIEW_TAGS };

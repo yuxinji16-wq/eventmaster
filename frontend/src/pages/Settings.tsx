@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { Settings as SettingsIcon, Mail, Globe, Save, Send } from 'lucide-react';
 import { settingsApi } from '../services/authApi';
+import { useToast } from '../shared/Toast';
 
 interface SiteSettings {
   id?: number;
@@ -21,6 +22,7 @@ interface SiteSettings {
 }
 
 const Settings: React.FC = () => {
+  const toast = useToast();
   const [settings, setSettings] = useState<SiteSettings>({
     site_name: 'EventMaster Pro',
     site_logo: '',
@@ -71,7 +73,7 @@ const Settings: React.FC = () => {
 
   const handleTestEmail = async () => {
     if (!settings.contact_email) {
-      alert('请先填写测试邮箱地址');
+      toast.warning('无法发送', '请先填写测试邮箱地址');
       return;
     }
     setIsTestingEmail(true);

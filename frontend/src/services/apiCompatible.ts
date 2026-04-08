@@ -3,8 +3,8 @@
  */
 import backendApi from './backendApi';
 
-// 配置：是否使用真实API
-const USE_REAL_API = false; // 修改为 true 使用真实API，false 使用模拟数据
+// 配置：是否使用真实API（默认从环境变量读取，开发环境使用模拟数据）
+const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
 
 // 模拟数据 - 使用深拷贝避免可变问题
 const getMockData = () => ({

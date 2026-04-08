@@ -99,17 +99,8 @@ export async function reportErrorToServer(error: AppError): Promise<void> {
   try {
     // 在实际实现中，这会 POST 到后端错误日志端点
     // POST /api/v1/logs/errors
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[ErrorApi] Report to server:', {
-        code: error.code,
-        message: error.message,
-        severity: error.severity,
-        context: error.context,
-        timestamp: error.timestamp,
-      });
-    }
   } catch (e) {
-    console.error('Failed to report error to server:', e);
+    // 静默处理上报失败，不影响主流程
   }
 }
 
@@ -183,7 +174,7 @@ export function initializeErrorTracking(): void {
     }
   }, true);
 
-  console.log('[ErrorTracking] Initialized');
+// 错误追踪初始化完成
 }
 
 /**

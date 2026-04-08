@@ -14,6 +14,22 @@ class SupplierService(BaseService[Supplier, SupplierRepository]):
     def __init__(self):
         super().__init__(SupplierRepository())
 
+    def delete(self, db: Session, id: int) -> bool:
+        """删除供应商及其关联的评价和账单"""
+        # 先删除关联的评价和账单
+        supplier_review_service = SupplierReviewService()
+        reviews = supplier_review_service.get_by_supplier(db, id)
+        for review in reviews:
+            supplier_review_service.repository.delete(db, review.id)
+
+        bill_service = BillService()
+        bills = bill_service.get_by_supplier(db, id)
+        for bill in bills:
+            bill_service.repository.delete(db, bill.id)
+
+        # 再删除供应商
+        return self.repository.delete(db, id)
+
     def get_by_category(self, db: Session, category: str, skip: int = 0, limit: int = 100) -> List[Supplier]:
         return self.repository.get_by_category(db, category, skip, limit)
 

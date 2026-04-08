@@ -10,6 +10,7 @@ import {
 import FeedbackCard from './FeedbackCard';
 import AddFeedbackModal from './AddFeedbackModal';
 import ScoreCard from './ScoreCard';
+import { useToast } from '../../shared/Toast';
 
 // ==================== 复盘详情页 ====================
 const ReviewDetailView: React.FC<{
@@ -17,6 +18,7 @@ const ReviewDetailView: React.FC<{
   onBack: () => void;
   onUpdate?: (updated: Partial<Review>) => void;
 }> = ({ review, onBack, onUpdate }) => {
+  const toast = useToast();
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const { generateSummary, fetchReviewActivities } = useReviewsData();
@@ -60,7 +62,7 @@ const ReviewDetailView: React.FC<{
       await fetchReviewActivities();
     } catch (err) {
       console.error('Failed to generate AI summary:', err);
-      alert('生成AI总结失败，请重试');
+      toast.error('生成失败', '生成AI总结失败，请重试');
     } finally {
       setIsGeneratingAI(false);
     }
@@ -68,10 +70,10 @@ const ReviewDetailView: React.FC<{
 
   const handleRemind = () => {
     if (unsubmittedCount <= 0) {
-      alert('所有评价已提交，无需提醒');
+      toast.info('无需提醒', '所有评价已提交，无需提醒');
       return;
     }
-    alert(`已向 ${unsubmittedCount} 位未评价人员发送提醒`);
+    toast.success('已发送提醒', `已向 ${unsubmittedCount} 位未评价人员发送提醒`);
   };
 
   return (

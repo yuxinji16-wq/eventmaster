@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useActivitiesData, useBudgetData } from '../../utils/hooks';
 import { BudgetLog, Activity, Budget, BudgetItem, BudgetCategory, BudgetStatus } from '../../types';
 import { getMarketingInsight } from '../../services/geminiService';
+import { useToast } from '../../shared/Toast';
 import BudgetOverview from './BudgetOverview';
 import BudgetDetail from './BudgetDetail';
 import BudgetItemModal from './BudgetItemModal';
@@ -14,6 +15,7 @@ export const BUDGET_CATEGORIES: BudgetCategory[] = [
 
 const BudgetManager: React.FC = () => {
   // API Hooks
+  const toast = useToast();
   const { activities, loading: activitiesLoading, updateActivity } = useActivitiesData();
   const { overview, activitiesWithBudget, loading: budgetLoading, updateQuota, getLogs, createLog, fetchBudgetOverview } = useBudgetData();
 
@@ -264,7 +266,7 @@ const BudgetManager: React.FC = () => {
       }
     } catch (err) {
       console.error('删除费用记录失败:', err);
-      alert('删除失败，请重试');
+      toast.error('删除失败', '删除费用记录失败，请重试');
     }
   };
 
@@ -282,7 +284,7 @@ const BudgetManager: React.FC = () => {
         setIsActivityEditModalOpen(false);
       } catch (err) {
         console.error('保存活动失败:', err);
-        alert('保存失败，请重试');
+        toast.error('保存失败', '保存活动失败，请重试');
       }
     } else {
       setIsActivityEditModalOpen(false);
@@ -299,7 +301,7 @@ const BudgetManager: React.FC = () => {
       setIsQuotaModalOpen(false);
     } catch (err) {
       console.error('更新配额失败:', err);
-      alert('保存失败，请重试');
+      toast.error('保存失败', '保存配额失败，请重试');
     }
   };
 

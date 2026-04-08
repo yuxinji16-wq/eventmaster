@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useOpportunitiesData, useActivitiesData } from '../../utils/hooks';
 import { Opportunity } from '../../types';
+import { useToast } from '../../shared/Toast';
 import { 
   TrendingUp, 
   Plus, 
@@ -19,6 +20,7 @@ import {
 
 const OpportunityManager: React.FC = () => {
   const navigate = useNavigate();
+  const toast = useToast();
   const { opportunities, loading, addOpportunity, updateOpportunity, deleteOpportunity } = useOpportunitiesData();
   const { activities } = useActivitiesData();
   const [selectedYear, setSelectedYear] = useState<string>('全部');
@@ -71,7 +73,7 @@ const OpportunityManager: React.FC = () => {
       setShowNewModal(false);
     } catch (err) {
       console.error('Failed to add opportunity:', err);
-      alert('添加商机失败，请重试');
+      toast.error('添加失败', '添加商机失败，请重试');
     }
   };
 
@@ -87,7 +89,7 @@ const OpportunityManager: React.FC = () => {
       await deleteOpportunity(parseInt(id));
     } catch (err) {
       console.error('删除商机失败:', err);
-      alert('删除失败，请重试');
+      toast.error('删除失败', '删除商机失败，请重试');
     }
   };
 

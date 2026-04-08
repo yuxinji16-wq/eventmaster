@@ -31,7 +31,9 @@ const YearlyDashboard: React.FC<YearlyDashboardProps> = ({ yearFilter }) => {
   const yearStats = useMemo(() => {
     const completedReviews = yearFilteredReviews.filter(r => r.status === ReviewStatus.COMPLETED);
 
-    const totalSpend = activities.reduce((sum, a) => sum + a.actualSpend, 0);
+    // 按年份筛选活动计算总花费
+    const yearActivities = activities.filter(a => a.year === yearFilter);
+    const totalSpend = yearActivities.reduce((sum, a) => sum + a.actualSpend, 0);
     const avgROI = completedReviews.length > 0
       ? completedReviews.reduce((sum, r) => sum + (r.conclusion?.overallScore || 0), 0) / completedReviews.length
       : 0;
@@ -40,12 +42,12 @@ const YearlyDashboard: React.FC<YearlyDashboardProps> = ({ yearFilter }) => {
       : 0;
 
     return {
-      activityCount: activities.length,
+      activityCount: yearFilteredReviews.length,
       totalSpend,
       avgROI,
       avgScore
     };
-  }, [yearFilteredReviews, activities]);
+  }, [yearFilteredReviews, activities, yearFilter]);
 
   // 活动类型对比数据
   const categoryStats = useMemo(() => {

@@ -40,7 +40,7 @@ export interface ApiMaterial {
 export interface ApiSupplier {
   id: number;
   name: string;
-  service_type: string;
+  category: string;
   rating: number;
   contact: string;
   phone: string;
@@ -385,6 +385,10 @@ export const suppliersApi = {
   delete: (id: number) => request<{ message: string }>(`/suppliers/${id}`, {
     method: 'DELETE',
   }),
+  getReviews: (id: number) =>
+    request<any[]>(`/suppliers/${id}/reviews`),
+  getBills: (id: number) =>
+    request<any[]>(`/suppliers/${id}/bills`),
   addReview: (id: number, data: { content: string; rating: number }) =>
     request<{ message: string }>(`/suppliers/${id}/reviews`, {
       method: 'POST',
@@ -437,22 +441,170 @@ export const opportunitiesApi = {
   }),
 };
 
+// ============ 复盘 API 类型 ============
+
+export interface ApiReview {
+  id: number;
+  activity_id: number;
+  status: string;
+  expected_participants: number;
+  participant_count: number;
+  lead_count: number;
+  confirmed_by?: string;
+  confirmed_at?: string;
+  reminded_at?: string;
+  reminded_count: number;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface ApiReviewFeedback {
+  id: number;
+  review_id: number;
+  evaluator_id: string;
+  evaluator_name: string;
+  evaluator_role?: string;
+  goal_score: number;
+  lead_quality_score: number;
+  execution_score: number;
+  resource_score: number;
+  brand_score: number;
+  successes?: string;
+  problems?: string;
+  suggestions?: string;
+  tags?: string[];
+  is_submitted: boolean;
+  submitted_at?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface ApiReviewConclusion {
+  id: number;
+  review_id: number;
+  ai_summary?: string;
+  key_successes?: string[];
+  common_problems?: string[];
+  action_suggestions?: string[];
+  manager_summary?: string;
+  manager_id?: string;
+  manager_name?: string;
+  avg_goal_score?: number;
+  avg_lead_quality_score?: number;
+  avg_execution_score?: number;
+  avg_resource_score?: number;
+  avg_brand_score?: number;
+  overall_score?: number;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface ApiReviewAvgScores {
+  avg_goal_score: number;
+  avg_lead_quality_score: number;
+  avg_execution_score: number;
+  avg_resource_score: number;
+  avg_brand_score: number;
+  overall_score: number;
+}
+
+export interface ApiGenerateSummaryResponse {
+  summary: string;
+  key_successes: string[];
+  common_problems: string[];
+  action_suggestions: string[];
+  avg_scores: ApiReviewAvgScores;
+}
+
 // ============ 复盘 API ============
 
 export const reviewsApi = {
+  // 获取需要复盘的活动列表
   getActivities: (status?: string) => {
     const query = status ? `?status=${status}` : '';
-    return request<ApiActivity[]>(`/reviews/activities${query}`);
+    return request<any[]>(`/reviews/activities${query}`);
   },
-  getSummary: (id: number) =>
-    request<{
-      budget_efficiency: number;
-      cpl: number;
-      roi: number;
-    }>(`/reviews/${id}`),
-  generateSummary: (id: number) =>
-    request<{ summary: string; insight: string }>(
-      `/reviews/${id}/generate-summary`,
+  // 获取单个复盘
+  getReview: (reviewId: number) =>
+    request<ApiReview>(`/reviews/${reviewId}`),
+  // 创建复盘
+  createReview: (data: { activity_id: number; status?: string; expected_participants?: number }) =>
+    request<ApiReview>('/reviews/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  // 更新复盘
+  updateReview: (reviewId: number, data: Partial<ApiReview>) =>
+    request<ApiReview>(`/reviews/${reviewId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  // 启动复盘
+  startReview: (reviewId: number) =>
+    request<ApiReview>(`/reviews/${reviewId}/start`, { method: 'POST' }),
+  // 完成复盘
+  completeReview: (reviewId: number) =>
+    request<ApiReview>(`/reviews/${reviewId}/complete`, { method: 'POST' }),
+  // 获取复盘反馈列表
+  getFeedbacks: (reviewId: number) =>
+    request<ApiReviewFeedback[]>(`/reviews/${reviewId}/feedbacks`),
+  // 创建复盘反馈
+  createFeedback: (data: {
+    review_id: number;
+    evaluator_id: string;
+    evaluator_name: string;
+    evaluator_role?: string;
+    goal_score: number;
+    lead_quality_score: number;
+    execution_score: number;
+    resource_score: number;
+    brand_score: number;
+    successes?: string;
+    problems?: string;
+    suggestions?: string;
+    tags?: string[];
+  }) =>
+    request<ApiReviewFeedback>('/reviews/feedbacks', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  // 更新复盘反馈
+  updateFeedback: (feedbackId: number, data: Partial<ApiReviewFeedback>) =>
+    request<ApiReviewFeedback>(`/reviews/feedbacks/${feedbackId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  // 提交反馈
+  submitFeedback: (feedbackId: number) =>
+    request<ApiReviewFeedback>(`/reviews/feedbacks/${feedbackId}/submit`, { method: 'POST' }),
+  // 获取复盘结论
+  getConclusion: (reviewId: number) =>
+    request<ApiReviewConclusion>(`/reviews/${reviewId}/conclusion`),
+  // 创建复盘结论
+  createConclusion: (data: {
+    review_id: number;
+    ai_summary?: string;
+    manager_summary?: string;
+    manager_id?: string;
+    manager_name?: string;
+  }) =>
+    request<ApiReviewConclusion>('/reviews/conclusions', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  // 更新复盘结论
+  updateConclusion: (conclusionId: number, data: Partial<ApiReviewConclusion>) =>
+    request<ApiReviewConclusion>(`/reviews/conclusions/${conclusionId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  // 获取平均分
+  getAvgScores: (reviewId: number) =>
+    request<ApiReviewAvgScores>(`/reviews/${reviewId}/avg-scores`),
+  // 生成AI摘要
+  generateSummary: (reviewId: number) =>
+    request<ApiGenerateSummaryResponse>(
+      `/reviews/${reviewId}/generate-summary`,
       { method: 'POST', body: JSON.stringify({}) }
     ),
 };

@@ -17,6 +17,13 @@ export enum ActivityStatus {
 export type ActivityCategory = '自办活动' | '外部市场活动';
 export type ActivityType = 'Exhibition' | 'Conference' | 'Webinar' | 'Roadshow';
 
+// 活动阶段定义
+export const ACTIVITY_STAGES = ['待启动', '筹备中', '执行中', '复盘中', '已完成'] as const;
+export type ActivityStage = typeof ACTIVITY_STAGES[number];
+
+// 风险等级
+export type RiskLevel = 'healthy' | 'warning' | 'danger';
+
 export enum ReviewStatus {
   NOT_STARTED = '未开始',
   IN_PROGRESS = '进行中',
@@ -87,6 +94,11 @@ export interface Activity {
   description?: string;
   created_at?: string;
   updated_at?: string;
+  // 活动详情页扩展字段
+  tasks?: ActivityTask[];
+  expenses?: ExpenseItem[];
+  riskLevel?: RiskLevel;
+  currentStage?: ActivityStage;
 }
 
 export interface Material {
@@ -257,6 +269,19 @@ export interface Task {
   updatedAt?: string;
   completedAt?: string;
   notes?: string;
+}
+
+// 活动任务（简化版，用于活动详情页本地管理）
+export interface ActivityTask {
+  id: string;
+  name: string;
+  description?: string;
+  assignee: string;
+  dueDate: string;
+  priority: 'P0' | 'P1' | 'P2';
+  status: '未开始' | '进行中' | '已完成' | '阻塞';
+  createdAt: string;
+  completedAt?: string;
 }
 
 // 媒体宣传

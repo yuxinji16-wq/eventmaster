@@ -7,7 +7,10 @@ import {
   activitiesApi, materialsApi, suppliersApi,
   opportunitiesApi, budgetApi, reviewsApi,
   Activity as ApiActivity, Material as ApiMaterial,
-  Supplier as ApiSupplier, Opportunity as ApiOpportunity, BudgetLog as ApiBudgetLog
+  Supplier as ApiSupplier, Opportunity as ApiOpportunity,
+  BudgetLog as ApiBudgetLog,
+  ApiReview, ApiReviewFeedback, ApiReviewConclusion,
+  ApiReviewAvgScores, ApiGenerateSummaryResponse
 } from '../services/backendApi';
 import {
   Activity, Material, Supplier, Opportunity, BudgetLog,
@@ -88,7 +91,7 @@ export function adaptSupplier(apiSupplier: ApiSupplier & { reviews?: any[]; bill
   return {
     id: String(apiSupplier.id),
     name: apiSupplier.name,
-    serviceType: (apiSupplier.service_type || '其他') as any,
+    serviceType: (apiSupplier.category || apiSupplier.service_type || '其他') as any,
     rating: apiSupplier.rating,
     contact: apiSupplier.contact,
     phone: apiSupplier.phone,
@@ -385,9 +388,10 @@ export function useSuppliersData() {
 
   const addSupplier = useCallback(async (data: Partial<Supplier>) => {
     try {
+      const category = data.serviceType || '其他';
       const apiData = {
         name: data.name || '',
-        service_type: data.serviceType || '其他',
+        category,
         rating: data.rating || 5,
         contact: data.contact || '',
         phone: data.phone || '',
@@ -398,7 +402,27 @@ export function useSuppliersData() {
         tags: data.tags,
       };
       const newSupplier = await suppliersApi.create(apiData);
-      const adapted = adaptSupplier(newSupplier);
+      // 直接使用我们发送的category，因为API响应可能字段名不一致
+      const adapted: Supplier = {
+        id: String(newSupplier.id),
+        name: newSupplier.name,
+        serviceType: (newSupplier.category || category) as any,
+        rating: newSupplier.rating,
+        contact: newSupplier.contact,
+        phone: newSupplier.phone,
+        email: newSupplier.email,
+        address: newSupplier.address,
+        lastUsed: newSupplier.last_used || new Date().toISOString().split('T')[0],
+        tags: newSupplier.tags || [],
+        orderCount: newSupplier.order_count || 0,
+        bankName: newSupplier.bank_name,
+        bankAccount: newSupplier.bank_account,
+        reviews: [],
+        bills: [],
+        attachments: [],
+        created_at: newSupplier.created_at,
+        updated_at: newSupplier.updated_at,
+      };
       setSuppliers(prev => [adapted, ...prev]);
       return adapted;
     } catch (err) {
@@ -411,7 +435,7 @@ export function useSuppliersData() {
     try {
       const apiData: Record<string, any> = {};
       if (data.name !== undefined) apiData.name = data.name;
-      if (data.serviceType !== undefined) apiData.service_type = data.serviceType;
+      if (data.serviceType !== undefined) apiData.category = data.serviceType;
       if (data.rating !== undefined) apiData.rating = data.rating;
       if (data.contact !== undefined) apiData.contact = data.contact;
       if (data.phone !== undefined) apiData.phone = data.phone;
@@ -679,9 +703,11 @@ export function useBudgetData() {
 
 /**
  * 复盘数据 Hook
+ * 合并所有活动与复盘数据，确保复盘中心显示所有活动
  */
 export function useReviewsData() {
   const [reviewActivities, setReviewActivities] = useState<any[]>([]);
+  const [allActivities, setAllActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -689,8 +715,57 @@ export function useReviewsData() {
     setLoading(true);
     setError(null);
     try {
-      const data = await reviewsApi.getActivities(status);
-      setReviewActivities(data || []);
+      // 并行获取复盘活动和所有活动
+      const [reviewData, activitiesData] = await Promise.all([
+        reviewsApi.getActivities(status),
+        activitiesApi.getList(),
+      ]);
+      const reviews = reviewData || [];
+      const activities = Array.isArray(activitiesData) ? activitiesData : activitiesData.activities || [];
+
+      setAllActivities(activities);
+
+      // 合并活动与复盘数据：所有活动都应出现在复盘中心
+      const merged = activities.map(activity => {
+        const review = reviews.find((r: any) => r.activity_id === parseInt(activity.id) || r.activityId === activity.id);
+        if (review) {
+          return {
+            id: review.id || review.review_id,
+            activityId: activity.id,
+            activityName: activity.name,
+            activityDate: activity.date,
+            status: review.status || '未开始',
+            created_at: review.created_at,
+            feedbacks: review.feedbacks || [],
+            conclusion: review.conclusion,
+            expectedParticipants: review.expected_participants || 0,
+            participantCount: review.participant_count || 0,
+            leadCount: review.lead_count || activity.leads || 0,
+          };
+        }
+        // 活动没有复盘记录，根据活动状态显示复盘状态
+        let reviewStatus = '未开始';
+        if (activity.status === '进行中') {
+          reviewStatus = '进行中';
+        } else if (activity.status === '已完成' || activity.status === '复盘中') {
+          reviewStatus = '待开始';
+        }
+        return {
+          id: null,
+          activityId: activity.id,
+          activityName: activity.name,
+          activityDate: activity.date,
+          status: reviewStatus,
+          created_at: activity.created_at,
+          feedbacks: [],
+          conclusion: null,
+          expectedParticipants: 0,
+          participantCount: activity.leads || 0,
+          leadCount: activity.leads || 0,
+        };
+      });
+
+      setReviewActivities(merged);
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取复盘活动失败');
       console.error('Failed to fetch review activities:', err);
@@ -713,22 +788,320 @@ export function useReviewsData() {
     }
   }, []);
 
-  // 更新复盘数据（包括添加反馈、删除反馈、更新状态等）
-  const updateReview = useCallback((reviewId: string, updates: any) => {
-    setReviewActivities(prev => prev.map(review => {
-      if (review.id === reviewId) {
-        return { ...review, ...updates };
-      }
-      return review;
-    }));
-  }, []);
+  // 创建复盘（当活动开始时自动创建）
+  const createReviewForActivity = useCallback(async (activityId: string) => {
+    try {
+      const numericId = parseInt(activityId);
+      const newReview = await reviewsApi.createReview({
+        activity_id: numericId,
+        status: '进行中',
+        expected_participants: 0,
+      });
+      // 刷新数据
+      await fetchReviewActivities();
+      return newReview;
+    } catch (err) {
+      console.error('Failed to create review:', err);
+      throw err;
+    }
+  }, [fetchReviewActivities]);
+
+  // 更新复盘状态
+  const updateReviewStatus = useCallback(async (reviewId: number, newStatus: string) => {
+    try {
+      await reviewsApi.updateReview(reviewId, { status: newStatus });
+      await fetchReviewActivities();
+    } catch (err) {
+      console.error('Failed to update review status:', err);
+      throw err;
+    }
+  }, [fetchReviewActivities]);
 
   return {
     reviewActivities,
+    allActivities,
     loading,
     error,
     fetchReviewActivities,
     generateSummary,
-    updateReview
+    createReviewForActivity,
+    updateReviewStatus,
+  };
+}
+
+/**
+ * 活动任务数据 Hook（本地状态管理）
+ * 用于活动详情页的任务管理
+ */
+export function useActivityTasks(initialTasks: any[] = []) {
+  const [tasks, setTasks] = useState<any[]>(initialTasks);
+  const [loading, setLoading] = useState(false);
+
+  // 添加任务
+  const addTask = useCallback(async (taskData: {
+    name: string;
+    description?: string;
+    assignee: string;
+    dueDate: string;
+    priority: 'P0' | 'P1' | 'P2';
+  }) => {
+    const newTask = {
+      id: `task-${Date.now()}`,
+      name: taskData.name,
+      description: taskData.description || '',
+      assignee: taskData.assignee,
+      dueDate: taskData.dueDate,
+      priority: taskData.priority,
+      status: '未开始' as const,
+      createdAt: new Date().toISOString(),
+    };
+    setTasks(prev => [newTask, ...prev]);
+    return newTask;
+  }, []);
+
+  // 更新任务
+  const updateTask = useCallback(async (taskId: string, updates: Partial<{
+    name: string;
+    description: string;
+    assignee: string;
+    dueDate: string;
+    priority: 'P0' | 'P1' | 'P2';
+    status: '未开始' | '进行中' | '已完成' | '阻塞';
+  }>) => {
+    setTasks(prev => prev.map(task => {
+      if (task.id === taskId) {
+        return { ...task, ...updates };
+      }
+      return task;
+    }));
+  }, []);
+
+  // 完成任务
+  const completeTask = useCallback(async (taskId: string) => {
+    setTasks(prev => prev.map(task => {
+      if (task.id === taskId) {
+        return {
+          ...task,
+          status: '已完成' as const,
+          completedAt: new Date().toISOString()
+        };
+      }
+      return task;
+    }));
+  }, []);
+
+  // 删除任务
+  const deleteTask = useCallback(async (taskId: string) => {
+    setTasks(prev => prev.filter(task => task.id !== taskId));
+  }, []);
+
+  // 获取未完成的任务（按优先级和截止日期排序）
+  const pendingTasks = tasks
+    .filter(t => t.status !== '已完成')
+    .sort((a, b) => {
+      const priorityOrder = { P0: 0, P1: 1, P2: 2 };
+      const priorityDiff = priorityOrder[a.priority] - priorityOrder[b.priority];
+      if (priorityDiff !== 0) return priorityDiff;
+      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+    });
+
+  // 获取延期任务
+  const overdueTasks = tasks.filter(t => {
+    if (t.status === '已完成') return false;
+    return new Date(t.dueDate) < new Date();
+  });
+
+  // 获取P0未完成任务
+  const p0PendingTasks = pendingTasks.filter(t => t.priority === 'P0');
+
+  return {
+    tasks,
+    loading,
+    addTask,
+    updateTask,
+    completeTask,
+    deleteTask,
+    pendingTasks,
+    overdueTasks,
+    p0PendingTasks,
+  };
+}
+
+/**
+ * 复盘数据 Hook
+ * 用于活动详情页的复盘管理
+ */
+export function useReviewData(activityId: string) {
+  const [review, setReview] = useState<ApiReview | null>(null);
+  const [feedbacks, setFeedbacks] = useState<ApiReviewFeedback[]>([]);
+  const [conclusion, setConclusion] = useState<ApiReviewConclusion | null>(null);
+  const [avgScores, setAvgScores] = useState<ApiReviewAvgScores | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const numericActivityId = tryParseId(activityId);
+
+  // 加载复盘数据
+  const loadReview = useCallback(async () => {
+    if (!numericActivityId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      // 获取该活动的复盘
+      const reviews = await reviewsApi.getReview(numericActivityId).catch(() => null) as unknown as ApiReview[];
+      if (reviews && (reviews as any).id) {
+        setReview(reviews as any);
+        const reviewId = (reviews as any).id;
+        // 获取反馈列表
+        const fbList = await reviewsApi.getFeedbacks(reviewId);
+        setFeedbacks(fbList || []);
+        // 获取平均分
+        try {
+          const scores = await reviewsApi.getAvgScores(reviewId);
+          setAvgScores(scores);
+        } catch { setAvgScores(null); }
+        // 获取结论
+        try {
+          const concl = await reviewsApi.getConclusion(reviewId);
+          setConclusion(concl);
+        } catch { setConclusion(null); }
+      } else {
+        setReview(null);
+        setFeedbacks([]);
+        setConclusion(null);
+        setAvgScores(null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载复盘失败');
+    } finally {
+      setLoading(false);
+    }
+  }, [numericActivityId]);
+
+  useEffect(() => {
+    if (numericActivityId) {
+      loadReview();
+    }
+  }, [numericActivityId, loadReview]);
+
+  // 创建复盘
+  const createReview = useCallback(async (expectedParticipants: number = 0) => {
+    if (!numericActivityId) return null;
+    try {
+      const newReview = await reviewsApi.createReview({
+        activity_id: numericActivityId,
+        status: '进行中',
+        expected_participants: expectedParticipants,
+      });
+      setReview(newReview);
+      return newReview;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '创建复盘失败');
+      throw err;
+    }
+  }, [numericActivityId]);
+
+  // 添加反馈
+  const addFeedback = useCallback(async (data: {
+    evaluator_id: string;
+    evaluator_name: string;
+    evaluator_role?: string;
+    goal_score: number;
+    lead_quality_score: number;
+    execution_score: number;
+    resource_score: number;
+    brand_score: number;
+    successes?: string;
+    problems?: string;
+    suggestions?: string;
+    tags?: string[];
+  }) => {
+    if (!review?.id) {
+      // 如果还没有复盘，先创建
+      const newReview = await createReview();
+      if (!newReview) throw new Error('创建复盘失败');
+    }
+    try {
+      const feedback = await reviewsApi.createFeedback({
+        ...data,
+        review_id: review!.id,
+      });
+      setFeedbacks(prev => [...prev, feedback]);
+      // 刷新平均分
+      try {
+        const scores = await reviewsApi.getAvgScores(review!.id);
+        setAvgScores(scores);
+      } catch { /* ignore */ }
+      return feedback;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '添加反馈失败');
+      throw err;
+    }
+  }, [review, createReview]);
+
+  // 更新反馈
+  const updateFeedback = useCallback(async (feedbackId: number, data: Partial<ApiReviewFeedback>) => {
+    try {
+      const updated = await reviewsApi.updateFeedback(feedbackId, data);
+      setFeedbacks(prev => prev.map(fb => fb.id === feedbackId ? updated : fb));
+      // 刷新平均分
+      if (review?.id) {
+        try {
+          const scores = await reviewsApi.getAvgScores(review.id);
+          setAvgScores(scores);
+        } catch { /* ignore */ }
+      }
+      return updated;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '更新反馈失败');
+      throw err;
+    }
+  }, [review]);
+
+  // 提交反馈
+  const submitFeedback = useCallback(async (feedbackId: number) => {
+    try {
+      const submitted = await reviewsApi.submitFeedback(feedbackId);
+      setFeedbacks(prev => prev.map(fb => fb.id === feedbackId ? submitted : fb));
+      return submitted;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '提交反馈失败');
+      throw err;
+    }
+  }, []);
+
+  // 生成AI摘要
+  const generateAiSummary = useCallback(async () => {
+    if (!review?.id) return null;
+    try {
+      const result = await reviewsApi.generateSummary(review.id);
+      // 保存结论
+      try {
+        const concl = await reviewsApi.createConclusion({
+          review_id: review.id,
+          ai_summary: result.summary,
+        });
+        setConclusion(concl);
+      } catch { /* 可能已存在 */ }
+      return result;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '生成AI摘要失败');
+      throw err;
+    }
+  }, [review]);
+
+  return {
+    review,
+    feedbacks,
+    conclusion,
+    avgScores,
+    loading,
+    error,
+    loadReview,
+    createReview,
+    addFeedback,
+    updateFeedback,
+    submitFeedback,
+    generateAiSummary,
   };
 }

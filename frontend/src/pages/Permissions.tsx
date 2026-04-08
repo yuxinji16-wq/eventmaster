@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, Plus, Edit2, Trash2, X, Loader2, AlertTriangle } from 'lucide-react';
 import { roleApi, Role } from '../services/authApi';
+import { useToast } from '../shared/Toast';
 
 const MODULES = [
   { id: 'activities', name: '活动管理' },
@@ -41,6 +42,7 @@ interface RoleFormData {
 }
 
 const Permissions: React.FC = () => {
+  const toast = useToast();
   const [roles, setRoles] = useState<Role[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
@@ -149,7 +151,7 @@ const Permissions: React.FC = () => {
       await roleApi.delete(id);
       setRoles(roles.filter(r => r.id !== id));
     } catch (err: any) {
-      alert(err.message || '删除失败');
+      toast.error('删除失败', err.message || '删除角色失败');
     }
   };
 

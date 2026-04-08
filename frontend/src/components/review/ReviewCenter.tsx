@@ -47,7 +47,6 @@ const ReviewCenter: React.FC = () => {
   const handleUpdateReview = (updated: Partial<Review>) => {
     // 由于使用了 hook，数据会自动更新
     // 这里可以添加额外的更新逻辑
-    console.log('Review updated:', updated);
   };
 
   // 渲染详情页

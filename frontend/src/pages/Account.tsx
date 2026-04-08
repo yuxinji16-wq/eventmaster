@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Plus, Edit2, Trash2, Shield, X, Loader2 } from 'lucide-react';
 import { userApi, roleApi, User as UserType, Role } from '../services/authApi';
+import { useToast } from '../shared/Toast';
 
 interface UserFormData {
   username: string;
@@ -14,6 +15,7 @@ interface UserFormData {
 }
 
 const Account: React.FC = () => {
+  const toast = useToast();
   const [users, setUsers] = useState<UserType[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -135,7 +137,7 @@ const Account: React.FC = () => {
       setUsers(users.filter(u => u.id !== id));
     } catch (err) {
       console.error('Failed to delete user:', err);
-      alert('删除失败');
+      toast.error('删除失败', '删除用户失败');
     }
   };
 

@@ -17,16 +17,13 @@ const MaterialDetail: React.FC = () => {
   const [withdrawalLogs, setWithdrawalLogs] = useState<WithdrawalLog[]>([]);
 
   useEffect(() => {
-    console.log('MaterialDetail mounted, id:', id);
     if (id) {
       setLoading(true);
       materialsApi.getDetail(parseInt(id))
         .then(data => {
-          console.log('Material fetched:', data);
           setMaterial(adaptMaterial(data));
         })
         .catch(err => {
-          console.error('Failed to fetch material:', err);
           setMaterial(null);
         })
         .finally(() => {

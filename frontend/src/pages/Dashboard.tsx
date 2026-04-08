@@ -63,7 +63,6 @@ const generateYearlyData = (year: string): DashboardData => {
 
 const Dashboard: React.FC = () => {
   const [globalYear, setGlobalYear] = useState('2024');
-  const [trendYear, setTrendYear] = useState('2024');
   const [chartType, setChartType] = useState<'bar' | 'line'>('line');
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -168,7 +167,7 @@ const Dashboard: React.FC = () => {
         }))
       };
     }
-    const mockData = generateYearlyData(trendYear);
+    const mockData = generateYearlyData(globalYear);
     return {
       monthly: mockData.monthly_trend.map(item => ({
         name: item.month,
@@ -181,7 +180,7 @@ const Dashboard: React.FC = () => {
         color: item.color
       }))
     };
-  }, [dashboardData, trendYear]);
+  }, [dashboardData, globalYear]);
 
   if (loading && !dashboardData) {
     return (
@@ -257,24 +256,10 @@ const Dashboard: React.FC = () => {
           <div className="flex justify-between items-center mb-4">
             <div>
               <h3 className="text-base font-bold text-slate-800">年度活动趋势</h3>
-              <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">{trendYear}</p>
+              <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">{globalYear}</p>
             </div>
 
             <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
-              <select
-                value={trendYear}
-                onChange={(e) => setTrendYear(e.target.value)}
-                className="appearance-none bg-white border border-slate-200 rounded px-2 py-1 text-xs font-bold text-slate-600 outline-none cursor-pointer"
-              >
-                <option value="2027">2027</option>
-                <option value="2026">2026</option>
-                <option value="2025">2025</option>
-                <option value="2024">2024</option>
-                <option value="2023">2023</option>
-              </select>
-
-              <div className="h-4 w-px bg-slate-200"></div>
-
               <div className="flex gap-0.5 bg-white p-0.5 rounded border border-slate-100">
                 <button
                   onClick={() => setChartType('bar')}
@@ -341,7 +326,7 @@ const Dashboard: React.FC = () => {
         {/* Distribution Pie */}
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
           <h3 className="text-base font-bold text-slate-800 mb-1">活动类型分布</h3>
-          <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider mb-3">{trendYear}</p>
+          <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider mb-3">{globalYear}</p>
           <div className="h-44 flex flex-col items-center justify-center relative">
             <ResponsiveContainer width="100%" height={160}>
               <PieChart>

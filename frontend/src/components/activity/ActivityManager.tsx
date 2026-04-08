@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useActivitiesData, useMaterialsData, useSuppliersData, useOpportunitiesData } from '../../utils/hooks';
 import { Activity, ActivityStatus, ReviewData, Task, TaskPriority, TaskStatus } from '../../types';
+import { ACTIVITY_INDUSTRIES } from '../../constants';
 import {
   Plus, Search, Calendar, X, Edit2, Trash2, ChevronDown, ArrowLeft,
   Sparkles, TrendingUp, Package, Users, MessageSquare, Star, Receipt, BarChart3, Save, ClipboardCheck, Loader2,
@@ -9,6 +10,7 @@ import {
   AlertTriangle, CheckCircle, Clock, Target, Wallet, Zap, AlertCircle, FileText, Folder, MoreVertical, Settings, Play, Pause
 } from 'lucide-react';
 import { getMarketingInsight } from '../../services/geminiService';
+import { useToast } from '../../shared/Toast';
 
 const MONTH_NAMES = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
 
@@ -22,6 +24,7 @@ const ACTIVITY_STAGES = [
 
 const ActivityManager: React.FC = () => {
   const navigate = useNavigate();
+  const toast = useToast();
   const { activities, loading, addActivity, updateActivity, deleteActivity, fetchActivities } = useActivitiesData();
   const { materials } = useMaterialsData();
   const { suppliers } = useSuppliersData();
@@ -31,10 +34,13 @@ const ActivityManager: React.FC = () => {
   const [yearFilter, setYearFilter] = useState('所有年份');
   const [categoryFilter, setCategoryFilter] = useState('所有分类');
   const [statusFilter, setStatusFilter] = useState('所有状态');
+  const [industryFilter, setIndustryFilter] = useState('所有行业');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   const [viewMode, setViewMode] = useState<'card' | 'calendar'>('card');
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+  const [manageMode, setManageMode] = useState(false);
+  const [selectedActivities, setSelectedActivities] = useState<Set<string>>(new Set());
 
   const filteredActivities = useMemo(() => {
     return activities.filter(activity => {
@@ -43,9 +49,10 @@ const ActivityManager: React.FC = () => {
       const matchesYear = yearFilter === '所有年份' || activity.year === yearFilter;
       const matchesCategory = categoryFilter === '所有分类' || activity.category === categoryFilter;
       const matchesStatus = statusFilter === '所有状态' || activity.status === statusFilter;
-      return matchesSearch && matchesYear && matchesCategory && matchesStatus;
+      const matchesIndustry = industryFilter === '所有行业' || activity.industry === industryFilter;
+      return matchesSearch && matchesYear && matchesCategory && matchesStatus && matchesIndustry;
     });
-  }, [activities, searchQuery, yearFilter, categoryFilter, statusFilter]);
+  }, [activities, searchQuery, yearFilter, categoryFilter, statusFilter, industryFilter]);
 
   // 从活动数据中动态获取所有可用年份
   const availableYears = useMemo(() => {
@@ -144,9 +151,14 @@ const ActivityManager: React.FC = () => {
             <p className="text-slate-500 font-medium">共 <span className="text-indigo-600 font-bold">{filteredActivities.length}</span> 个活动</p>
           </div>
         </div>
-        <button onClick={() => { setEditingActivity(null); setIsModalOpen(true); }} className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg shadow-indigo-500/30 hover:bg-indigo-700 transition-all">
-          <Plus size={18} /> 创建新活动
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={() => { setEditingActivity(null); setIsModalOpen(true); }} className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg shadow-indigo-500/30 hover:bg-indigo-700 transition-all">
+            <Plus size={18} /> 创建新活动
+          </button>
+          <button onClick={() => { setManageMode(!manageMode); setSelectedActivities(new Set()); }} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold shadow-lg transition-all ${manageMode ? 'bg-slate-600 text-white hover:bg-slate-700' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}>
+            <Settings size={18} /> {manageMode ? '取消管理' : '管理活动'}
+          </button>
+        </div>
       </div>
 
       {/* 筛选栏 */}
@@ -159,6 +171,7 @@ const ActivityManager: React.FC = () => {
           <FilterDropdown value={yearFilter} onChange={setYearFilter} options={yearOptions} />
           <FilterDropdown value={categoryFilter} onChange={setCategoryFilter} options={[{label: '所有分类', value: '所有分类'}, {label: '自办活动', value: '自办活动'}, {label: '外部市场活动', value: '外部市场活动'}]} />
           <FilterDropdown value={statusFilter} onChange={setStatusFilter} options={[{label: '所有状态', value: '所有状态'}, ...Object.values(ActivityStatus).map(s => ({label: s, value: s}))]} />
+          <FilterDropdown value={industryFilter} onChange={setIndustryFilter} options={[{label: '所有行业', value: '所有行业'}, ...ACTIVITY_INDUSTRIES.map(i => ({label: i, value: i}))]} />
         </div>
       </div>
 
@@ -202,12 +215,20 @@ const ActivityManager: React.FC = () => {
       {viewMode === 'card' && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pb-10">
           {filteredActivities.map((activity) => (
-            <div key={activity.id} onClick={() => navigate(`/activities/${activity.id}`)} className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-xl hover:border-indigo-100 transition-all group relative overflow-hidden cursor-pointer">
+            <div className={`bg-white p-5 rounded-xl shadow-sm border transition-all group relative overflow-hidden ${manageMode ? 'cursor-pointer' : 'hover:shadow-xl hover:border-indigo-100'} ${selectedActivities.has(activity.id) ? 'border-indigo-500 ring-2 ring-indigo-200' : 'border-slate-100'}`}>
+              {manageMode && (
+                <div className="absolute top-3 left-3 z-20" onClick={(e) => { e.stopPropagation(); const newSet = new Set(selectedActivities); if (newSet.has(activity.id)) newSet.delete(activity.id); else newSet.add(activity.id); setSelectedActivities(newSet); }}>
+                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${selectedActivities.has(activity.id) ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 bg-white'}`}>
+                    {selectedActivities.has(activity.id) && <Check size={12} className="text-white" />}
+                  </div>
+                </div>
+              )}
               <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50/30 rounded-full -mr-12 -mt-12 group-hover:scale-150 transition-all duration-700"></div>
               <div className="flex justify-between items-start mb-3 relative z-10">
                 <div className="flex flex-wrap gap-1.5">
                   <span className={`px-2 py-1 rounded-lg text-[10px] font-black ${activity.status === ActivityStatus.COMPLETED ? 'bg-emerald-100 text-emerald-700' : activity.status === ActivityStatus.ONGOING ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>{activity.status}</span>
                   <span className="px-2 py-1 bg-slate-50 text-slate-500 rounded-lg text-[10px] font-black">{activity.category}</span>
+                  {activity.industry && <span className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-black">{activity.industry}</span>}
                 </div>
               </div>
               <h3 className="text-base font-black text-slate-800 mb-1 truncate group-hover:text-indigo-600 transition-colors relative z-10">{activity.name}</h3>
@@ -220,6 +241,15 @@ const ActivityManager: React.FC = () => {
                 <div><p className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><Wallet size={10} /> 预算</p><p className="font-black text-slate-800 text-sm">¥{(activity.budget/10000).toFixed(1)}w</p></div>
                 <div className="text-right"><p className="text-[10px] font-black text-slate-400 uppercase flex items-center justify-end gap-1"><Target size={10} /> 潜客</p><p className="font-black text-indigo-600 text-sm">{activity.leads}</p></div>
               </div>
+              {manageMode && (
+                <div className="absolute bottom-3 right-3 flex gap-2 z-20">
+                  <button onClick={(e) => { e.stopPropagation(); setEditingActivity(activity); setIsModalOpen(true); }} className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700"><Edit2 size={12} /></button>
+                  <button onClick={(e) => { e.stopPropagation(); if (window.confirm(`确定要删除活动"${activity.name}"吗？`)) { deleteActivity(activity.id); } }} className="px-3 py-1.5 bg-rose-500 text-white text-xs font-bold rounded-lg hover:bg-rose-600"><Trash2 size={12} /></button>
+                </div>
+              )}
+              {!manageMode && (
+                <div onClick={() => navigate(`/activities/${activity.id}`)} className="absolute inset-0 cursor-pointer" />
+              )}
             </div>
           ))}
         </div>
@@ -239,7 +269,7 @@ const ActivityManager: React.FC = () => {
             setIsModalOpen(false);
           } catch (err) {
             console.error('保存活动失败:', err);
-            alert('保存失败，请重试');
+            toast.error('保存失败', '保存活动失败，请重试');
           }
         }} />
       )}
@@ -1404,7 +1434,7 @@ const ActivityDetailView: React.FC<{
             setActiveModal(null);
           } catch (err) {
             console.error('保存活动失败:', err);
-            alert('保存失败，请重试');
+            toast.error('保存失败', '保存活动失败，请重试');
           }
         }} />
       )}
@@ -1470,7 +1500,10 @@ const FilterDropdown: React.FC<{ value: string; onChange: (val: string) => void;
 );
 
 const ActivityFormModal: React.FC<{ activity: Activity | null; onClose: () => void; onSave: (data: Partial<Activity>) => void }> = ({ activity, onClose, onSave }) => {
-  const [formData, setFormData] = useState<Partial<Activity>>(activity || { name: '', date: new Date().toISOString().split('T')[0], location: '', type: 'Exhibition', category: '自办活动', status: ActivityStatus.PLANNED, budget: 100000, leads: 0, description: '' });
+  const [formData, setFormData] = useState<Partial<Activity>>(activity || { name: '', date: new Date().toISOString().split('T')[0], location: '', type: 'Exhibition', category: '自办活动', status: ActivityStatus.PLANNED, budget: 100000, leads: 0, description: '', industry: '' });
+
+  const isExternal = formData.category === '外部市场活动';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xl" onClick={onClose}></div>
@@ -1484,6 +1517,20 @@ const ActivityFormModal: React.FC<{ activity: Activity | null; onClose: () => vo
             <div className="col-span-2"><label className="text-xs font-bold text-slate-400 uppercase">活动名称</label><input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 mt-1" /></div>
             <div><label className="text-xs font-bold text-slate-400 uppercase">日期</label><input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 mt-1" /></div>
             <div><label className="text-xs font-bold text-slate-400 uppercase">地点</label><input value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 mt-1" /></div>
+            <div><label className="text-xs font-bold text-slate-400 uppercase">活动类型</label>
+              <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value, industry: e.target.value === '自办活动' ? '' : (formData.industry || '')})} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold mt-1">
+                <option value="自办活动">自办活动</option>
+                <option value="外部市场活动">外部市场活动</option>
+              </select>
+            </div>
+            {isExternal && (
+              <div><label className="text-xs font-bold text-slate-400 uppercase">关联行业</label>
+                <select value={formData.industry || ''} onChange={e => setFormData({...formData, industry: e.target.value})} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold mt-1">
+                  <option value="">请选择行业</option>
+                  {ACTIVITY_INDUSTRIES.map(ind => <option key={ind} value={ind}>{ind}</option>)}
+                </select>
+              </div>
+            )}
             <div><label className="text-xs font-bold text-slate-400 uppercase">状态</label><select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold mt-1">{Object.values(ActivityStatus).map(s => <option key={s} value={s}>{s}</option>)}</select></div>
             <div><label className="text-xs font-bold text-slate-400 uppercase">预算(万)</label><input type="number" value={formData.budget ? formData.budget / 10000 : 0} onChange={e => setFormData({...formData, budget: Number(e.target.value) * 10000})} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 mt-1" /></div>
             <div className="col-span-2"><label className="text-xs font-bold text-slate-400 uppercase">简介</label><textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} rows={2} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-600 mt-1 resize-none" /></div>

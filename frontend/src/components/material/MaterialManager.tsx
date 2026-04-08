@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMaterialsData } from '../../utils/hooks';
 import { Material } from '../../types';
+import { useToast } from '../../shared/Toast';
 import { 
   Package, AlertCircle, CheckCircle2, XCircle, Search, Filter, History, Clock, 
   Tag, ChevronDown, Plus, X, Check, Layers, Boxes, FileText, Database, 
@@ -33,6 +34,7 @@ interface WithdrawalLog {
 
 const MaterialManager: React.FC = () => {
   const navigate = useNavigate();
+  const toast = useToast();
   const { materials, loading, addMaterial, updateMaterial, deleteMaterial, addStock, withdraw } = useMaterialsData();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('所有分类');
@@ -193,7 +195,7 @@ const MaterialManager: React.FC = () => {
   // 导出领用流水为 CSV 文件
   const handleExportExcel = () => {
     if (filteredWithdrawals.length === 0) {
-      alert('暂无领用记录可导出');
+      toast.warning('无法导出', '暂无领用记录可导出');
       return;
     }
 
@@ -394,7 +396,6 @@ const MaterialManager: React.FC = () => {
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                console.log('详情 clicked, id:', item.id, 'path:', `/materials/${item.id}`);
                                 navigate(`/materials/${item.id}`);
                               }}
                               className="px-4 py-2 bg-slate-50 text-slate-400 text-[11px] font-black uppercase rounded-xl hover:bg-slate-200 hover:text-slate-600 transition-all"
@@ -739,6 +740,7 @@ export const MaterialDetailView: React.FC<{
   warehousingLogs?: WarehousingLog[];
   withdrawalLogs?: WithdrawalLog[];
 }> = ({ material, onBack, onEdit, warehousingLogs = [], withdrawalLogs = [] }) => {
+  const toast = useToast();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState(material);
 
@@ -751,7 +753,7 @@ export const MaterialDetailView: React.FC<{
   // 导出入库流水
   const handleExport = () => {
     if (allLogs.length === 0) {
-      alert('暂无入库流水记录可导出');
+      toast.warning('无法导出', '暂无入库流水记录可导出');
       return;
     }
 
