@@ -516,18 +516,16 @@ function MaterialModal({ onClose, onSave }: { onClose: () => void; onSave: (data
   const [submitting, setSubmitting] = useState(false);
 
   // 加载物料列表
-  useEffect(() => {
-    loadMaterials();
-  }, [categoryFilter]);
-
   const loadMaterials = async () => {
     setLoading(true);
     try {
       const params: any = {};
       if (categoryFilter) params.category = categoryFilter;
-      if (search) params.search = search;
+      if (search) params.keyword = search;
       const response = await materialsApi.getList(params);
-      setMaterials(response.materials || []);
+      // 处理后端返回的数组格式或 { materials: [] } 格式
+      const data = Array.isArray(response) ? response : response.materials || response.data || [];
+      setMaterials(data);
     } catch (err) {
       console.error('加载物料失败:', err);
       setMaterials([]);
@@ -536,15 +534,18 @@ function MaterialModal({ onClose, onSave }: { onClose: () => void; onSave: (data
     }
   };
 
+  // 初始加载 + 筛选变化时重新加载
+  useEffect(() => {
+    loadMaterials();
+  }, [categoryFilter]);
+
   // 搜索处理（防抖）
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (search || categoryFilter) {
-        loadMaterials();
-      }
+      loadMaterials();
     }, 300);
     return () => clearTimeout(timer);
-  }, [search, categoryFilter]);
+  }, [search]);
 
   // 计算库存状态
   const getStockStatus = (stock: number) => {
