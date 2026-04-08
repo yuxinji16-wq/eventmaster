@@ -208,7 +208,7 @@ function StatCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function StatusPanelItem({ icon, title, stats, status }: { icon: React.ReactNode; title: string; stats: { label: string; value: string | number; color?: string }[]; status?: { type: 'success' | 'warning' | 'danger'; text: string } }) {
+function StatusPanelItem({ icon, title, stats, status }: { icon: React.ReactNode; title: string; stats: { label: string; value: string | number; color?: string }[]; status?: { type: 'success' | 'warning' | 'danger' | 'neutral'; text: string } }) {
   return (
     <div className="bg-white rounded-xl border border-slate-100 p-4">
       <div className="flex items-center gap-2 mb-3">
@@ -507,6 +507,7 @@ function SupplierModal({ onClose, onSave }: { onClose: () => void; onSave: (data
 }
 
 function MaterialModal({ onClose, onSave }: { onClose: () => void; onSave: (data: any) => void }) {
+  const toast = useToast();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [materials, setMaterials] = useState<any[]>([]);
@@ -524,7 +525,7 @@ function MaterialModal({ onClose, onSave }: { onClose: () => void; onSave: (data
       if (search) params.keyword = search;
       const response = await materialsApi.getList(params);
       // 处理后端返回的数组格式或 { materials: [] } 格式
-      const data = Array.isArray(response) ? response : response.materials || response.data || [];
+      const data = Array.isArray(response) ? response : (response as any).materials || [];
       setMaterials(data);
     } catch (err) {
       console.error('加载物料失败:', err);

@@ -99,6 +99,26 @@ export interface Activity {
   expenses?: ExpenseItem[];
   riskLevel?: RiskLevel;
   currentStage?: ActivityStage;
+  // 复盘数据
+  reviewData?: ReviewData;
+}
+
+// 活动复盘数据（本地管理）
+export interface ReviewData {
+  status?: ReviewStatus;
+  participantCount?: number;
+  expectedParticipants?: number;
+  conversionRate: number;
+  satisfactionScore: number;
+  keyAchievements: string;
+  problems: string;
+  lessonsLearned: string;
+  nextSuggestions: string;
+  reviewDate: string;
+  reviewer: string;
+  comments?: ReviewComment[];
+  evaluations?: ReviewEvaluation[];
+  isReviewed?: boolean;
 }
 
 export interface Material {
@@ -128,6 +148,8 @@ export interface Supplier {
   lastUsed?: string;
   orderCount: number;
   tags?: string[];
+  reviews?: SupplierReview[];
+  bills?: BillRecord[];
   created_at?: string;
   updated_at?: string;
 }
@@ -325,6 +347,8 @@ export interface ExpenseItem {
   id: string;
   name: string;
   amount: number;
+  plannedAmount?: number;
+  actualAmount?: number;
   category: ExpenseCategory;
   date: string;
   payer?: string;

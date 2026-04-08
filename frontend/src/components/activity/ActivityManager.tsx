@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useActivitiesData, useMaterialsData, useSuppliersData, useOpportunitiesData } from '../../utils/hooks';
-import { Activity, ActivityStatus, ReviewData, Task, TaskPriority, TaskStatus } from '../../types';
+import { Activity, ActivityStatus, ReviewStatus, ReviewComment, ReviewData, ReviewEvaluation, Task, TaskPriority, TaskStatus } from '../../types';
 import { ACTIVITY_INDUSTRIES } from '../../constants';
 import {
   Plus, Search, Calendar, X, Edit2, Trash2, ChevronDown, ArrowLeft,
@@ -284,6 +284,10 @@ const ActivityDetailView: React.FC<{
   onUpdate: (updated: Activity) => void;
   onDelete: () => void;
 }> = ({ activity, onBack, onUpdate, onDelete }) => {
+  const toast = useToast();
+  const { materials } = useMaterialsData();
+  const { suppliers } = useSuppliersData();
+  const { opportunities } = useOpportunitiesData();
   const [activeTab, setActiveTab] = useState('progress');
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
