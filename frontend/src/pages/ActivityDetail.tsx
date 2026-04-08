@@ -1489,12 +1489,41 @@ const ActivityDetail: React.FC = () => {
   const [editForm, setEditForm] = useState<Partial<Activity>>({});
   const [activeTab, setActiveTab] = useState('progress');
 
+  // 活动数据 localStorage Key
+  const getMaterialsStorageKey = (activityId: string) => `activity_${activityId}_materials`;
+
+  // 从 localStorage 加载物料数据
+  const loadMaterialsFromStorage = useCallback((activityId: string): any[] => {
+    try {
+      const stored = localStorage.getItem(getMaterialsStorageKey(activityId));
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  }, []);
+
+  // 保存物料数据到 localStorage
+  const saveMaterialsToStorage = useCallback((activityId: string, materials: any[]) => {
+    try {
+      localStorage.setItem(getMaterialsStorageKey(activityId), JSON.stringify(materials));
+    } catch (err) {
+      console.error('保存物料数据失败:', err);
+    }
+  }, []);
+
   // 本地数据状态
   const [tasks, setTasks] = useState<ActivityTask[]>([]);
   const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
   const [opportunities, setOpportunities] = useState<any[]>([]);
+
+  // 物料数据变化时保存到 localStorage
+  useEffect(() => {
+    if (id && materials.length >= 0) {
+      saveMaterialsToStorage(id, materials);
+    }
+  }, [id, materials, saveMaterialsToStorage]);
 
   // 弹窗状态
   const [taskModalOpen, setTaskModalOpen] = useState(false);
@@ -1560,7 +1589,14 @@ const ActivityDetail: React.FC = () => {
         if (found.expenses) setExpenses(found.expenses);
       }
     }
-  }, [id, activities]);
+    // 从 localStorage 加载物料数据
+    if (id) {
+      const storedMaterials = loadMaterialsFromStorage(id);
+      if (storedMaterials.length > 0) {
+        setMaterials(storedMaterials);
+      }
+    }
+  }, [id, activities, loadMaterialsFromStorage]);
 
   // 计算风险
   const riskLevel = useMemo(() => {
