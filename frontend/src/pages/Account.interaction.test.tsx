@@ -10,11 +10,29 @@ import Account from './Account';
 import type { User as UserType, Role } from '../services/authApi';
 
 // 存储 mock 函数引用
-const mockRequest = vi.fn();
+const mockUserApiGetList = vi.fn();
+const mockRoleApiGetList = vi.fn();
+const mockUserApiUpdate = vi.fn();
+const mockUserApiCreate = vi.fn();
+const mockUserApiDelete = vi.fn();
 
-// 必须在任何组件导入之前 mock
-vi.mock('../services/backendApi', () => ({
-  request: (...args: unknown[]) => mockRequest(...args),
+// 必须在任何组件导入之前 mock authApi
+vi.mock('../services/authApi', () => ({
+  userApi: {
+    getList: (...args: unknown[]) => mockUserApiGetList(...args),
+    get: (...args: unknown[]) => Promise.resolve({}),
+    create: (...args: unknown[]) => mockUserApiCreate(...args),
+    update: (...args: unknown[]) => mockUserApiUpdate(...args),
+    delete: (...args: unknown[]) => mockUserApiDelete(...args),
+    getMyPermissions: vi.fn().mockResolvedValue({}),
+  },
+  roleApi: {
+    getList: (...args: unknown[]) => mockRoleApiGetList(...args),
+    get: vi.fn().mockResolvedValue({}),
+    create: vi.fn().mockResolvedValue({}),
+    update: vi.fn().mockResolvedValue({}),
+    delete: vi.fn().mockResolvedValue({}),
+  },
 }));
 
 // Mock Toast
@@ -63,44 +81,11 @@ const setupMocks = (options: {
   createResult?: unknown;
 } = {}) => {
   const { users = mockUsers, roles = mockRoles, deleteResult, updateResult, createResult } = options;
-
-  mockRequest.mockImplementation((url: string) => {
-    if (url === '/users') return Promise.resolve(users);
-    if (url === '/roles') return Promise.resolve(roles);
-    if (url.startsWith('/users/') && url.endsWith('/') && options.deleteResult !== undefined) {
-      return Promise.resolve(deleteResult ?? { message: 'Deleted' });
-    }
-    if (url.startsWith('/users/') && url.includes('permissions')) {
-      return Promise.resolve({});
-    }
-    if (url.match(/^\/users\/\d+$/)) {
-      return Promise.resolve(updateResult ?? {});
-    }
-    return Promise.reject(new Error('Unknown endpoint'));
-  });
-};
-
-// 专门处理带 HTTP 方法的请求
-const setupMockWithMethod = (options: {
-  users?: UserType[];
-  roles?: Role[];
-} = {}) => {
-  const { users = mockUsers, roles = mockRoles } = options;
-
-  mockRequest.mockImplementation((url: string, options?: { method?: string; body?: string }) => {
-    if (url === '/users' && !options?.method) return Promise.resolve(users);
-    if (url === '/roles' && !options?.method) return Promise.resolve(roles);
-    if (url === '/users' && options?.method === 'POST') {
-      return Promise.resolve({ id: 3, username: 'newuser', email: 'new@example.com', is_active: true, is_superadmin: false, role_id: null, created_at: '2024-03-01', updated_at: '2024-03-01' });
-    }
-    if (url.match(/^\/users\/\d+$/) && options?.method === 'PUT') {
-      return Promise.resolve({});
-    }
-    if (url.match(/^\/users\/\d+$/) && options?.method === 'DELETE') {
-      return Promise.resolve({ message: 'Deleted' });
-    }
-    return Promise.reject(new Error('Unknown endpoint'));
-  });
+  mockUserApiGetList.mockResolvedValue(users);
+  mockRoleApiGetList.mockResolvedValue(roles);
+  mockUserApiDelete.mockResolvedValue(deleteResult ?? { message: 'Deleted' });
+  mockUserApiUpdate.mockResolvedValue(updateResult ?? {});
+  mockUserApiCreate.mockResolvedValue(createResult ?? { id: 3, username: 'newuser', email: 'new@example.com', is_active: true, is_superadmin: false, role_id: null, created_at: '2024-03-01' });
 };
 
 const renderAccount = () => {
@@ -115,7 +100,7 @@ describe('账号管理页面交互测试', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // 默认设置正常返回
-    setupMockWithMethod();
+    setupMocks();
     // 确保 window.confirm 返回 true
     window.confirm = vi.fn().mockReturnValue(true);
   });
@@ -287,8 +272,7 @@ describe('账号管理页面交互测试', () => {
       await user.click(screen.getByRole('button', { name: /删除/ }));
 
       await waitFor(() => {
-        // 验证 DELETE 请求被调用
-        expect(mockRequest).toHaveBeenCalledWith('/users/2', expect.objectContaining({ method: 'DELETE' }));
+        expect(mockUserApiDelete).toHaveBeenCalledWith(2);
       });
     });
   });
@@ -541,8 +525,7 @@ describe('账号管理页面交互测试', () => {
         expect(screen.getByText('admin')).toBeInTheDocument();
       });
 
-      // 加载完成后，Loader2 的父容器不应存在
-      // 通过检查 spinner 不存在来验证
+      // 加载完成后，spinner 不应存在
       const spinners = document.querySelectorAll('[class*="animate-spin"]');
       expect(spinners.length).toBe(0);
     });
@@ -550,7 +533,7 @@ describe('账号管理页面交互测试', () => {
 
   describe('边界情况测试', () => {
     it('空用户列表应显示空状态', async () => {
-      setupMockWithMethod({ users: [], roles: [] });
+      setupMocks({ users: [], roles: [] });
       renderAccount();
 
       await waitFor(() => {
@@ -558,11 +541,11 @@ describe('账号管理页面交互测试', () => {
       });
     });
 
-    it('网络错误应进入错误状态（无 UI 显示，通过控制台观察）', async () => {
-      mockRequest.mockRejectedValue(new Error('Network error'));
+    it('网络错误应进入错误状态', async () => {
+      mockUserApiGetList.mockRejectedValue(new Error('Network error'));
+      mockRoleApiGetList.mockRejectedValue(new Error('Network error'));
       renderAccount();
 
-      // 组件在网络错误时只记录到 console.error，不显示特定 UI
       await waitFor(() => {
         expect(screen.getByText('账号管理')).toBeInTheDocument();
       }, { timeout: 3000 });

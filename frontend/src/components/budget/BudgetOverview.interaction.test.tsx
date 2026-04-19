@@ -30,6 +30,9 @@ const mockProps = {
   setSearchQuery: vi.fn(),
   categoryFilter: '所有类型',
   setCategoryFilter: vi.fn(),
+  industryFilter: '所有行业',
+  setIndustryFilter: vi.fn(),
+  availableIndustries: ['科技', '金融', '教育'],
   statusFilter: '全部状态',
   setStatusFilter: vi.fn(),
   onYearChange: vi.fn(),
@@ -106,7 +109,7 @@ describe('BudgetOverview 组件', () => {
       render(<BudgetOverview {...mockProps} setStatusFilter={setStatusFilter} />);
 
       const selects = screen.getAllByRole('combobox');
-      const statusSelect = selects[2]; // 第三个下拉框是状态筛选
+      const statusSelect = selects[3]; // 第4个下拉框是状态筛选
 
       fireEvent.change(statusSelect, { target: { value: '超预算' } });
       expect(setStatusFilter).toHaveBeenCalledWith('超预算');
