@@ -12,13 +12,13 @@ class Material(Base, TimestampMixin):
 
     name = Column(String(200), nullable=False, index=True)
     category = Column(String(50))  # 产品宣传册, 易拉宝, 会议定制, 礼品, 办公用品, 其他
-    unit = Column(String(20))
+    type = Column(String(50))  # 物料类型
     stock = Column(Float, default=0)
-    min_stock = Column(Float, default=0)
-    location = Column(String(100))
-    supplier_id = Column(Integer, ForeignKey("suppliers.id"))
-    price = Column(Float, default=0)
-    description = Column(Text)
+    unit = Column(String(20))
+    status = Column(String(20))  # 在库, 低库存, 缺货
+    usage_count = Column(Integer, default=0)  # 使用次数
+    last_updated = Column(String(20))  # 最后更新时间
+    image_url = Column(String(500))  # 物料图片
 
 
 class WarehousingLog(Base, TimestampMixin):
@@ -44,3 +44,7 @@ class WithdrawalLog(Base, TimestampMixin):
     user = Column(String(100))  # 领用人
     reason = Column(String(500))  # 领用原因
     date = Column(String(20))  # 出库日期
+    activity_id = Column(Integer, ForeignKey("activities.id"), nullable=True, index=True)
+    status = Column(String(20), default="领用中")  # 领用中, 已归还, 部分归还, 已消耗
+    returned_at = Column(String(20))
+    return_count = Column(Float, default=0)

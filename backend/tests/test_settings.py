@@ -6,13 +6,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def admin_token(client: TestClient, db_session: Session) -> str:
     """创建超级管理员用户并返回 token"""
     response = client.post("/api/auth/register", json={
         "username": "settingsadmin",
         "email": "settingsadmin@example.com",
-        "password": "admin123"
+        "password": "AdminTest1"
     })
     assert response.status_code == 200
 
@@ -23,22 +23,22 @@ def admin_token(client: TestClient, db_session: Session) -> str:
 
     login_response = client.post("/api/auth/login", json={
         "username": "settingsadmin",
-        "password": "admin123"
+        "password": "AdminTest1"
     })
     return login_response.json()["access_token"]
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def normal_token(client: TestClient) -> str:
     """创建普通用户并返回 token"""
     client.post("/api/auth/register", json={
         "username": "settingsnormal",
         "email": "settingsnormal@example.com",
-        "password": "normal123"
+        "password": "NormalTest1"
     })
     response = client.post("/api/auth/login", json={
         "username": "settingsnormal",
-        "password": "normal123"
+        "password": "NormalTest1"
     })
     return response.json()["access_token"]
 

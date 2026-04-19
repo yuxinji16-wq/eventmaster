@@ -3,6 +3,7 @@
 """
 from typing import Optional, List
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from app.models.opportunity import Opportunity
 from app.repositories.base import BaseRepository
 
@@ -28,9 +29,14 @@ class OpportunityRepository(BaseRepository[Opportunity]):
         """搜索商机"""
         keyword_filter = f"%{keyword}%"
         return db.query(Opportunity).filter(
-            Opportunity.client_name.ilike(keyword_filter) |
-            Opportunity.company.ilike(keyword_filter) |
-            Opportunity.contact.ilike(keyword_filter)
+            or_(
+                Opportunity.client_name.ilike(keyword_filter),
+                Opportunity.company.ilike(keyword_filter),
+                Opportunity.contact.ilike(keyword_filter),
+                Opportunity.contact_person.ilike(keyword_filter),
+                Opportunity.phone.ilike(keyword_filter),
+                Opportunity.requirement.ilike(keyword_filter),
+            )
         ).offset(skip).limit(limit).all()
 
     def get_high_intent(self, db: Session, skip: int = 0, limit: int = 100) -> List[Opportunity]:

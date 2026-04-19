@@ -34,7 +34,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
             <li key={item.id}>
               <button
                 onClick={() => onTabChange(item.id)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg transition-all duration-200 ${
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg transition-all duration-200 cursor-pointer ${
                   activeTab === item.id
                     ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
                     : 'text-slate-400 hover:bg-slate-800 hover:text-white'
@@ -54,7 +54,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
               <li key={item.id}>
                 <button
                   onClick={() => navigate(item.path)}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg transition-all duration-200 ${
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg transition-all duration-200 cursor-pointer ${
                     activeTab === item.id
                       ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
                       : 'text-slate-400 hover:bg-slate-800 hover:text-white'
@@ -83,7 +83,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
         </div>
         <button
           onClick={handleLogout}
-          className="w-full py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all"
+          className="w-full py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all cursor-pointer"
         >
           退出登录
         </button>

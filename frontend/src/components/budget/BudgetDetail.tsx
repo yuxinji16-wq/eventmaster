@@ -226,7 +226,7 @@ const BudgetDetail: React.FC<BudgetDetailProps> = ({
           <h3 className="font-black text-slate-800 mb-6 flex items-center gap-2">
             <PieIcon size={18} className="text-emerald-500" /> 执行进度
           </h3>
-          <div className="relative w-48 h-48">
+          <div className="relative w-48 h-48 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie

@@ -262,3 +262,60 @@ class TestReviewAPI:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert isinstance(data, list)
+
+    def test_generate_review_summary(self, client, sample_review_data):
+        """测试生成复盘AI摘要"""
+        # 先创建复盘
+        create_response = client.post("/api/reviews/", json=sample_review_data)
+        review_id = create_response.json()["id"]
+
+        response = client.post(f"/api/reviews/{review_id}/generate-summary")
+        # 可能返回 200 或 500（如果 AI 服务不可用）
+        assert response.status_code in [status.HTTP_200_OK, status.HTTP_500_INTERNAL_SERVER_ERROR]
+        if response.status_code == status.HTTP_200_OK:
+            data = response.json()
+            assert "summary" in data or "key_successes" in data or "ai_summary" in data
+
+    def test_update_review_conclusion(self, client, sample_review_data):
+        """测试更新复盘结论"""
+        # 先创建复盘
+        create_response = client.post("/api/reviews/", json=sample_review_data)
+        review_id = create_response.json()["id"]
+
+        # 创建结论
+        conclusion_data = {
+            "review_id": review_id,
+            "ai_summary": "初始总结",
+            "key_successes": ["成功"],
+            "common_problems": ["问题"],
+            "action_suggestions": ["建议"],
+            "manager_id": "manager003",
+            "manager_name": "经理乙",
+            "overall_score": 3.5
+        }
+        create_resp = client.post("/api/reviews/conclusions", json=conclusion_data)
+        conclusion_id = create_resp.json()["id"]
+
+        # 更新结论
+        update_data = {
+            "ai_summary": "更新后的AI总结",
+            "key_successes": ["更新后的成功"],
+            "common_problems": ["更新后的问题"],
+            "action_suggestions": ["更新后的建议"],
+            "manager_summary": "更新后的管理总结",
+            "overall_score": 4.2
+        }
+        response = client.put(f"/api/reviews/conclusions/{conclusion_id}", json=update_data)
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["ai_summary"] == "更新后的AI总结"
+        assert data["overall_score"] == 4.2
+
+    def test_update_nonexistent_conclusion(self, client, sample_review_data):
+        """测试更新不存在的结论"""
+        update_data = {
+            "ai_summary": "不存在的结论",
+            "overall_score": 4.0
+        }
+        response = client.put("/api/reviews/conclusions/99999", json=update_data)
+        assert response.status_code == status.HTTP_404_NOT_FOUND

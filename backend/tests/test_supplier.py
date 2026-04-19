@@ -192,3 +192,38 @@ class TestSupplierAPI:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert isinstance(data, list)
+
+    def test_create_supplier_review_simplified(self, client, sample_supplier_data):
+        """测试简化创建供应商评价"""
+        # 先创建供应商
+        create_response = client.post("/api/suppliers/", json=sample_supplier_data)
+        supplier_id = create_response.json()["id"]
+
+        # 使用简化格式创建评价
+        review_data = {
+            "content": "服务态度很好，按时交付",
+            "rating": 5
+        }
+        response = client.post(f"/api/suppliers/{supplier_id}/reviews", json=review_data)
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["overall_score"] == 5
+
+    def test_create_supplier_bill_simplified(self, client, sample_supplier_data):
+        """测试简化创建供应商账单"""
+        # 先创建供应商
+        create_response = client.post("/api/suppliers/", json=sample_supplier_data)
+        supplier_id = create_response.json()["id"]
+
+        # 使用简化格式创建账单
+        bill_data = {
+            "activity_name": "2026春季活动",
+            "project_name": "场地搭建",
+            "amount": 15000.0,
+            "status": "待付款",
+            "date": "2026-04-15"
+        }
+        response = client.post(f"/api/suppliers/{supplier_id}/bills", json=bill_data)
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["amount"] == 15000.0

@@ -136,3 +136,41 @@ class TestMaterialAPI:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert isinstance(data, list)
+
+    def test_create_global_warehousing_log(self, client, sample_material_data):
+        """测试创建全局入库记录"""
+        # 先创建物料
+        create_response = client.post("/api/materials/", json=sample_material_data)
+        material_id = create_response.json()["id"]
+
+        # 创建全局入库记录
+        warehousing_data = {
+            "material_id": material_id,
+            "count": 100.0,
+            "operator": "全局操作员",
+            "is_new_type": "true"
+        }
+        response = client.post("/api/materials/warehousing", json=warehousing_data)
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["material_id"] == material_id
+        assert data["count"] == 100.0
+
+    def test_create_global_withdrawal_log(self, client, sample_material_data):
+        """测试创建全局出库记录"""
+        # 先创建物料
+        create_response = client.post("/api/materials/", json=sample_material_data)
+        material_id = create_response.json()["id"]
+
+        # 创建全局出库记录
+        withdrawal_data = {
+            "material_id": material_id,
+            "count": 20.0,
+            "user": "全局用户",
+            "reason": "全局出库测试"
+        }
+        response = client.post("/api/materials/withdrawal", json=withdrawal_data)
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["material_id"] == material_id
+        assert data["count"] == 20.0

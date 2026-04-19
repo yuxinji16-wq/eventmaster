@@ -1,19 +1,45 @@
 """
 供应商 Schema
 """
+import json
 from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel, ConfigDict
+from typing import Optional, List, Any
+from pydantic import BaseModel, ConfigDict, field_validator
+
+
+def _parse_tags(v: Any) -> Optional[List[str]]:
+    """解析 tags 字段，支持字符串和列表"""
+    if v is None:
+        return None
+    if isinstance(v, list):
+        return v
+    if isinstance(v, str):
+        try:
+            return json.loads(v)
+        except:
+            return [v]
+    return None
 
 
 class SupplierBase(BaseModel):
     name: str
-    category: Optional[str] = None
+    category: Optional[str] = None  # 服务类型别名
+    service_type: Optional[str] = None  # 服务类型
     contact: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
     address: Optional[str] = None
-    description: Optional[str] = None
+    rating: Optional[float] = None
+    bank_name: Optional[str] = None
+    bank_account: Optional[str] = None
+    last_used: Optional[str] = None
+    order_count: Optional[int] = 0
+    tags: Optional[List[str]] = None
+
+    @field_validator('tags', mode='before')
+    @classmethod
+    def parse_tags(cls, v):
+        return _parse_tags(v)
 
 
 class SupplierCreate(SupplierBase):
@@ -23,11 +49,22 @@ class SupplierCreate(SupplierBase):
 class SupplierUpdate(BaseModel):
     name: Optional[str] = None
     category: Optional[str] = None
+    service_type: Optional[str] = None
     contact: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
     address: Optional[str] = None
-    description: Optional[str] = None
+    rating: Optional[float] = None
+    bank_name: Optional[str] = None
+    bank_account: Optional[str] = None
+    last_used: Optional[str] = None
+    order_count: Optional[int] = None
+    tags: Optional[List[str]] = None
+
+    @field_validator('tags', mode='before')
+    @classmethod
+    def parse_tags(cls, v):
+        return _parse_tags(v)
 
 
 class SupplierResponse(SupplierBase):
@@ -46,6 +83,7 @@ class SupplierReviewBase(BaseModel):
     price_score: float  # 价格评分
     overall_score: float  # 综合评分
     comments: Optional[str] = None
+    reviewer_name: Optional[str] = None
 
 
 class SupplierReviewCreate(SupplierReviewBase):
@@ -62,8 +100,10 @@ class SupplierReviewResponse(SupplierReviewBase):
 class BillBase(BaseModel):
     supplier_id: int
     activity_id: Optional[int] = None
+    activity_name: Optional[str] = None
+    project_name: Optional[str] = None
     amount: float
-    status: str  # 待付款, 已付款, 已结算
+    status: str  # 待结算, 已结清
     due_date: Optional[str] = None
     paid_at: Optional[str] = None
     notes: Optional[str] = None

@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useActivitiesData, useMaterialsData, useSuppliersData, useOpportunitiesData } from '../../utils/hooks';
 import { Activity, ActivityStatus, ReviewStatus, ReviewComment, ReviewData, ReviewEvaluation, Task, TaskPriority, TaskStatus } from '../../types';
 import { ACTIVITY_INDUSTRIES } from '../../constants';
@@ -10,7 +10,9 @@ import {
   AlertTriangle, CheckCircle, Clock, Target, Wallet, Zap, AlertCircle, FileText, Folder, MoreVertical, Settings, Play, Pause
 } from 'lucide-react';
 import { getMarketingInsight } from '../../services/geminiService';
+import { activitiesApi } from '../../services/backendApi';
 import { useToast } from '../../shared/Toast';
+import { AsyncState } from '../../shared/AsyncState';
 
 const MONTH_NAMES = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
 
@@ -24,8 +26,9 @@ const ACTIVITY_STAGES = [
 
 const ActivityManager: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const toast = useToast();
-  const { activities, loading, addActivity, updateActivity, deleteActivity, fetchActivities } = useActivitiesData();
+  const { activities, loading, error, addActivity, updateActivity, deleteActivity, fetchActivities } = useActivitiesData();
   const { materials } = useMaterialsData();
   const { suppliers } = useSuppliersData();
   const { opportunities } = useOpportunitiesData();
@@ -41,11 +44,40 @@ const ActivityManager: React.FC = () => {
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
   const [manageMode, setManageMode] = useState(false);
   const [selectedActivities, setSelectedActivities] = useState<Set<string>>(new Set());
+  const [taskImportModal, setTaskImportModal] = useState<{ open: boolean; activityId: string; activityName: string }>({ open: false, activityId: '', activityName: '' });
+  const [taskSummary, setTaskSummary] = useState<Record<string, { task_count: number; completed_task_count: number }>>({});
+
+  useEffect(() => {
+    const year = searchParams.get('year');
+    if (year) setYearFilter(year);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (yearFilter === '所有年份') {
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        next.delete('year');
+        return next;
+      });
+      return;
+    }
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('year', yearFilter);
+      return next;
+    });
+  }, [yearFilter, setSearchParams]);
+
+  useEffect(() => {
+    activitiesApi.getTaskSummary().then(setTaskSummary).catch(() => setTaskSummary({}));
+  }, [activities]);
 
   const filteredActivities = useMemo(() => {
     return activities.filter(activity => {
-      const matchesSearch = activity.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           (activity.description && activity.description.toLowerCase().includes(searchQuery.toLowerCase()));
+      const name = activity.name || '';
+      const desc = activity.description || '';
+      const matchesSearch = name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                           desc.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesYear = yearFilter === '所有年份' || activity.year === yearFilter;
       const matchesCategory = categoryFilter === '所有分类' || activity.category === categoryFilter;
       const matchesStatus = statusFilter === '所有状态' || activity.status === statusFilter;
@@ -82,6 +114,26 @@ const ActivityManager: React.FC = () => {
   }, [filteredActivities]);
 
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
+
+  if (loading) {
+    return (
+      <AsyncState loading loadingText="活动数据加载中...">
+        <div />
+      </AsyncState>
+    );
+  }
+
+  if (error) {
+    return (
+      <AsyncState
+        error={error}
+        errorTitle="活动数据加载失败"
+        onRetry={() => fetchActivities()}
+      >
+        <div />
+      </AsyncState>
+    );
+  }
 
   const handleUpdateActivity = async (updated: Activity) => {
     await updateActivity(parseInt(updated.id), updated);
@@ -215,7 +267,9 @@ const ActivityManager: React.FC = () => {
       {viewMode === 'card' && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pb-10">
           {filteredActivities.map((activity) => (
-            <div className={`bg-white p-5 rounded-xl shadow-sm border transition-all group relative overflow-hidden ${manageMode ? 'cursor-pointer' : 'hover:shadow-xl hover:border-indigo-100'} ${selectedActivities.has(activity.id) ? 'border-indigo-500 ring-2 ring-indigo-200' : 'border-slate-100'}`}>
+            <div
+              onClick={() => !manageMode && navigate(`/activities/${activity.id}`)}
+              className={`bg-white p-5 rounded-xl shadow-sm border transition-all group relative overflow-hidden cursor-pointer ${manageMode ? '' : 'hover:shadow-xl hover:border-indigo-100'} ${selectedActivities.has(activity.id) ? 'border-indigo-500 ring-2 ring-indigo-200' : 'border-slate-100'}`}>
               {manageMode && (
                 <div className="absolute top-3 left-3 z-20" onClick={(e) => { e.stopPropagation(); const newSet = new Set(selectedActivities); if (newSet.has(activity.id)) newSet.delete(activity.id); else newSet.add(activity.id); setSelectedActivities(newSet); }}>
                   <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${selectedActivities.has(activity.id) ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 bg-white'}`}>
@@ -238,17 +292,33 @@ const ActivityManager: React.FC = () => {
                 <span>{activity.date}</span>
               </div>
               <div className="pt-3 border-t border-slate-50 flex items-center justify-between relative z-10">
-                <div><p className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><Wallet size={10} /> 预算</p><p className="font-black text-slate-800 text-sm">¥{(activity.budget/10000).toFixed(1)}w</p></div>
+                <div><p className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><Wallet size={10} /> 费用</p><p className="font-black text-slate-800 text-sm">¥{(activity.budget/10000).toFixed(1)}w</p></div>
                 <div className="text-right"><p className="text-[10px] font-black text-slate-400 uppercase flex items-center justify-end gap-1"><Target size={10} /> 潜客</p><p className="font-black text-indigo-600 text-sm">{activity.leads}</p></div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-slate-100 relative z-10">
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <Zap size={12} className="text-indigo-500" />
+                    <span className="text-[10px] font-black text-slate-500 uppercase">执行任务</span>
+                  </div>
+                  <span className="text-[10px] font-black text-slate-500">
+                    {taskSummary[activity.id]?.completed_task_count || 0}/{taskSummary[activity.id]?.task_count || 0}
+                  </span>
+                </div>
+                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-indigo-500 rounded-full transition-all"
+                    style={{
+                      width: `${taskSummary[activity.id]?.task_count ? ((taskSummary[activity.id].completed_task_count || 0) / taskSummary[activity.id].task_count) * 100 : 0}%`
+                    }}
+                  />
+                </div>
               </div>
               {manageMode && (
                 <div className="absolute bottom-3 right-3 flex gap-2 z-20">
                   <button onClick={(e) => { e.stopPropagation(); setEditingActivity(activity); setIsModalOpen(true); }} className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700"><Edit2 size={12} /></button>
                   <button onClick={(e) => { e.stopPropagation(); if (window.confirm(`确定要删除活动"${activity.name}"吗？`)) { deleteActivity(activity.id); } }} className="px-3 py-1.5 bg-rose-500 text-white text-xs font-bold rounded-lg hover:bg-rose-600"><Trash2 size={12} /></button>
                 </div>
-              )}
-              {!manageMode && (
-                <div onClick={() => navigate(`/activities/${activity.id}`)} className="absolute inset-0 cursor-pointer" />
               )}
             </div>
           ))}
@@ -272,6 +342,24 @@ const ActivityManager: React.FC = () => {
             toast.error('保存失败', '保存活动失败，请重试');
           }
         }} />
+      )}
+
+      {taskImportModal.open && (
+        <TaskImportModal
+          activityId={taskImportModal.activityId}
+          activityName={taskImportModal.activityName}
+          onClose={() => setTaskImportModal({ open: false, activityId: '', activityName: '' })}
+          onImport={(tasks) => {
+            // 找到对应活动并更新任务
+            const activity = activities.find(a => a.id === taskImportModal.activityId);
+            if (activity) {
+              const existingTasks = activity.tasks || [];
+              const updatedActivity = { ...activity, tasks: [...existingTasks, ...tasks] };
+              updateActivity(parseInt(activity.id), updatedActivity as any);
+              toast.success('任务导入成功', `成功导入 ${tasks.length} 个任务`);
+            }
+          }}
+        />
       )}
     </div>
   );
@@ -1656,6 +1744,231 @@ const AddTaskModal: React.FC<{ activityId: string; onClose: () => void; onSave: 
             <button type="submit" className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 flex items-center justify-center gap-2"><Check size={16} /> 添加</button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+};
+
+// 任务导入模态框
+const TaskImportModal: React.FC<{
+  activityId: string;
+  activityName: string;
+  onClose: () => void;
+  onImport: (tasks: Task[]) => void;
+}> = ({ activityId, activityName, onClose, onImport }) => {
+  const [importMode, setImportMode] = useState<'paste' | 'file'>('paste');
+  const [pasteData, setPasteData] = useState('');
+  const [fileName, setFileName] = useState('');
+  const [parsedTasks, setParsedTasks] = useState<Task[]>([]);
+  const [error, setError] = useState('');
+
+  // 解析粘贴的数据（支持空格或Tab分隔的Excel/Sheets数据）
+  const parsePastedData = (text: string): Task[] => {
+    const lines = text.trim().split('\n').filter(line => line.trim());
+    const tasks: Task[] = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      // 支持Tab分隔、空格分隔、逗号分隔
+      // 先尝试Tab分隔
+      let parts = line.split('\t');
+      // 如果不是Tab分隔，尝试用空格分隔（保留多个空格作为分隔符）
+      if (parts.length < 4) {
+        parts = line.split(/\s{1,}/);
+      }
+      // 如果还不是4个部分，尝试逗号分隔
+      if (parts.length < 4) {
+        parts = line.split(',');
+      }
+
+      if (parts.length >= 4) {
+        // 清理引号
+        const cleanPart = (p: string) => p.trim().replace(/^["']|["']$/g, '');
+        const name = cleanPart(parts[0]);
+        const assignee = cleanPart(parts[1]);
+        const dueDate = cleanPart(parts[2]);
+        const priorityStr = cleanPart(parts[3]).toUpperCase();
+
+        if (name && assignee) {
+          // 解析优先级
+          let priority: TaskPriority = TaskPriority.P1;
+          if (priorityStr === 'P0') priority = TaskPriority.P0;
+          else if (priorityStr === 'P1') priority = TaskPriority.P1;
+          else if (priorityStr === 'P2') priority = TaskPriority.P2;
+          // 如果priorityStr不是P0/P1/P2但parts有5个，说明日期和优先级颠倒了
+          else if (parts.length >= 5) {
+            // 可能是 任务名 负责人 日期(带P) 优先级 这种格式
+            const maybePriority = parts[4]?.toUpperCase().trim();
+            if (maybePriority === 'P0' || maybePriority === 'P1' || maybePriority === 'P2') {
+              priority = maybePriority as TaskPriority;
+            }
+          }
+
+          tasks.push({
+            id: `t-import-${Date.now()}-${i}`,
+            name,
+            assignee,
+            dueDate: dueDate || new Date().toISOString().split('T')[0],
+            priority,
+            status: TaskStatus.TODO,
+            activityId,
+            createdAt: new Date().toISOString().split('T')[0]
+          });
+        }
+      }
+    }
+    return tasks;
+  };
+
+  // 处理文件导入
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      const tasks = parsePastedData(text);
+      if (tasks.length > 0) {
+        setParsedTasks(tasks);
+        setError('');
+      } else {
+        setError('无法解析文件，请确保格式正确（任务名、负责人、截止日期、优先级）');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // 处理粘贴数据预览
+  const handlePastePreview = () => {
+    if (!pasteData.trim()) {
+      setError('请粘贴数据');
+      return;
+    }
+    const tasks = parsePastedData(pasteData);
+    if (tasks.length > 0) {
+      setParsedTasks(tasks);
+      setError('');
+    } else {
+      setError('无法解析数据，请确保格式正确：每行一个任务，格式为：任务名[Tab]负责人[Tab]截止日期[Tab]优先级');
+    }
+  };
+
+  // 下载导入模板
+  const downloadTemplate = () => {
+    const template = '任务名称 负责人 截止日期 优先级\nexample task 张三 2024-03-15 P1';
+    const blob = new Blob([template], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '任务导入模板.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xl" onClick={onClose}></div>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg z-10 overflow-hidden max-h-[90vh] overflow-y-auto">
+        <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-purple-50">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-xl font-black text-slate-800">导入任务</h3>
+              <p className="text-xs text-slate-500">{activityName}</p>
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full text-slate-400"><X size={20} /></button>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {/* 导入模式切换 */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setImportMode('paste'); setParsedTasks([]); setError(''); }}
+              className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all ${importMode === 'paste' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+            >
+              粘贴数据
+            </button>
+            <button
+              onClick={() => { setImportMode('file'); setParsedTasks([]); setError(''); }}
+              className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all ${importMode === 'file' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+            >
+              文件导入
+            </button>
+          </div>
+
+          {importMode === 'paste' ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-400">粘贴Excel/Sheets数据</label>
+                <button onClick={downloadTemplate} className="text-xs text-indigo-600 hover:text-indigo-700 font-bold">下载模板</button>
+              </div>
+              <textarea
+                value={pasteData}
+                onChange={(e) => { setPasteData(e.target.value); setParsedTasks([]); }}
+                placeholder="从Excel或Google Sheets粘贴数据，支持空格或Tab分隔&#10;格式：任务名称 负责人 截止日期 优先级&#10;示例：&#10;场地确认    张三    2024-03-15    P0&#10;物料采购    李四    2024-03-20    P1"
+                rows={6}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-sm text-slate-700 resize-none"
+              />
+              <button onClick={handlePastePreview} className="w-full py-2 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200">
+                预览解析结果
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <label className="block">
+                <input type="file" accept=".csv,.txt,.xlsx" onChange={handleFileChange} className="hidden" />
+                <div className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center cursor-pointer hover:border-indigo-400 transition-colors">
+                  <Upload size={32} className="mx-auto mb-2 text-slate-300" />
+                  <p className="text-sm font-bold text-slate-500">点击选择文件</p>
+                  <p className="text-xs text-slate-400 mt-1">支持 CSV、TXT、XLSX 格式</p>
+                </div>
+              </label>
+              {fileName && <p className="text-sm text-slate-500">已选择: {fileName}</p>}
+            </div>
+          )}
+
+          {error && (
+            <div className="p-3 bg-rose-50 text-rose-600 rounded-xl text-sm font-medium">
+              {error}
+            </div>
+          )}
+
+          {/* 解析结果预览 */}
+          {parsedTasks.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-emerald-600">解析到 {parsedTasks.length} 个任务：</p>
+              <div className="max-h-48 overflow-y-auto space-y-1">
+                {parsedTasks.map((task, i) => (
+                  <div key={i} className="flex items-center gap-2 p-2 bg-emerald-50 rounded-lg text-xs">
+                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-black ${
+                      task.priority === 'P0' ? 'bg-rose-100 text-rose-600' :
+                      task.priority === 'P1' ? 'bg-amber-100 text-amber-600' :
+                      'bg-slate-100 text-slate-600'
+                    }`}>{task.priority}</span>
+                    <span className="flex-1 font-medium text-slate-700 truncate">{task.name}</span>
+                    <span className="text-slate-400">{task.assignee}</span>
+                    <span className="text-slate-400">{task.dueDate}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t border-slate-100 flex gap-3">
+          <button onClick={onClose} className="flex-1 py-2.5 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50">取消</button>
+          <button
+            onClick={() => { if (parsedTasks.length > 0) { onImport(parsedTasks); onClose(); } }}
+            disabled={parsedTasks.length === 0}
+            className={`flex-1 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 ${parsedTasks.length > 0 ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
+          >
+            <Download size={16} /> 确认导入 ({parsedTasks.length})
+          </button>
+        </div>
       </div>
     </div>
   );

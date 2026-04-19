@@ -5,7 +5,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.schemas.opportunity import OpportunityCreate, OpportunityUpdate, OpportunityResponse
+from app.schemas.opportunity import OpportunityCreate, OpportunityUpdate, OpportunityResponse, OpportunityActivityLogResponse
 from app.services.opportunity import OpportunityService
 from app.core.errors import OpportunityException
 
@@ -84,11 +84,32 @@ def get_opportunity(opportunity_id: int, db: Session = Depends(get_db)):
     return opportunity
 
 
+@router.get("/{opportunity_id}/logs", response_model=List[OpportunityActivityLogResponse])
+def get_opportunity_logs(opportunity_id: int, db: Session = Depends(get_db)):
+    """获取商机操作记录"""
+    from app.models.opportunity import OpportunityActivityLog
+    return db.query(OpportunityActivityLog).filter(
+        OpportunityActivityLog.opportunity_id == opportunity_id
+    ).order_by(OpportunityActivityLog.created_at.desc()).all()
+
+
 @router.post("/", response_model=OpportunityResponse)
 def create_opportunity(data: OpportunityCreate, db: Session = Depends(get_db)):
     """创建商机"""
     try:
-        return service.create(db, data.model_dump())
+        payload = data.model_dump()
+        if not payload.get("status") or payload.get("status") == "潜在客户":
+            payload["status"] = "未跟进"
+        opportunity = service.create(db, payload)
+        from app.models.opportunity import OpportunityActivityLog
+        db.add(OpportunityActivityLog(
+            opportunity_id=opportunity.id,
+            action="创建线索",
+            to_value=opportunity.status,
+        ))
+        db.commit()
+        db.refresh(opportunity)
+        return opportunity
     except Exception as e:
         raise OpportunityException.creation_failed(reason=str(e))
 
@@ -96,15 +117,33 @@ def create_opportunity(data: OpportunityCreate, db: Session = Depends(get_db)):
 @router.put("/{opportunity_id}", response_model=OpportunityResponse)
 def update_opportunity(opportunity_id: int, data: OpportunityUpdate, db: Session = Depends(get_db)):
     """更新商机"""
-    opportunity = service.update(db, opportunity_id, data.model_dump(exclude_unset=True))
+    old = service.get(db, opportunity_id)
+    old_status = old.status if old else None
+    payload = data.model_dump(exclude_unset=True)
+    opportunity = service.update(db, opportunity_id, payload)
     if not opportunity:
         raise OpportunityException.not_found(opportunity_id)
+    if "status" in payload and payload["status"] != old_status:
+        from app.models.opportunity import OpportunityActivityLog
+        db.add(OpportunityActivityLog(
+            opportunity_id=opportunity_id,
+            action="状态变更",
+            from_value=old_status,
+            to_value=payload["status"],
+        ))
+        db.commit()
+        db.refresh(opportunity)
     return opportunity
 
 
 @router.delete("/{opportunity_id}")
 def delete_opportunity(opportunity_id: int, db: Session = Depends(get_db)):
     """删除商机"""
+    from app.models.opportunity import OpportunityActivityLog
+    db.query(OpportunityActivityLog).filter(
+        OpportunityActivityLog.opportunity_id == opportunity_id
+    ).delete(synchronize_session=False)
+    db.commit()
     if not service.delete(db, opportunity_id):
         raise OpportunityException.not_found(opportunity_id)
     return {"message": "删除成功", "code": "E0000"}

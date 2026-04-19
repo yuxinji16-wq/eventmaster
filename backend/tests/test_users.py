@@ -5,14 +5,17 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+# 测试用户密码 - 符合密码强度要求
+TEST_PASSWORD_STRONG = "Admin123"  # 大写+小写+数字，8位以上
 
-@pytest.fixture
+
+@pytest.fixture(scope="function")
 def admin_token(client: TestClient, db_session: Session) -> str:
     """创建超级管理员用户并返回 token"""
     response = client.post("/api/auth/register", json={
         "username": "adminfortest",
         "email": "adminfortest@example.com",
-        "password": "admin123"
+        "password": TEST_PASSWORD_STRONG
     })
     assert response.status_code == 200
 
@@ -23,22 +26,22 @@ def admin_token(client: TestClient, db_session: Session) -> str:
 
     login_response = client.post("/api/auth/login", json={
         "username": "adminfortest",
-        "password": "admin123"
+        "password": TEST_PASSWORD_STRONG
     })
     return login_response.json()["access_token"]
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def normal_token(client: TestClient) -> str:
     """创建普通用户并返回 token"""
     client.post("/api/auth/register", json={
         "username": "normalfortest",
         "email": "normalfortest@example.com",
-        "password": "normal123"
+        "password": "Normal123"
     })
     response = client.post("/api/auth/login", json={
         "username": "normalfortest",
-        "password": "normal123"
+        "password": "Normal123"
     })
     return response.json()["access_token"]
 
@@ -54,7 +57,7 @@ class TestUsersAPI:
             json={
                 "username": "newtestuser",
                 "email": "newtestuser@example.com",
-                "password": "newpass123"
+                "password": "Newpass123"
             }
         )
         assert response.status_code == 200
@@ -70,7 +73,7 @@ class TestUsersAPI:
             json={
                 "username": "shouldfail",
                 "email": "shouldfail@example.com",
-                "password": "pass123"
+                "password": "Pass12345"
             }
         )
         assert response.status_code == 403
@@ -82,7 +85,7 @@ class TestUsersAPI:
             json={
                 "username": "noauthuser",
                 "email": "noauth@example.com",
-                "password": "pass123"
+                "password": "Pass12345"
             }
         )
         # HTTPBearer 在无 token 时返回 403
@@ -108,7 +111,7 @@ class TestUsersAPI:
             json={
                 "username": "detailuser",
                 "email": "detailuser@example.com",
-                "password": "pass123"
+                "password": "Detail123"
             }
         )
         user_id = create_response.json()["id"]
@@ -131,7 +134,7 @@ class TestUsersAPI:
             json={
                 "username": "updateuser",
                 "email": "updateuser@example.com",
-                "password": "pass123"
+                "password": "Update123"
             }
         )
         user_id = create_response.json()["id"]
@@ -157,7 +160,7 @@ class TestUsersAPI:
             json={
                 "username": "pwduser",
                 "email": "pwduser@example.com",
-                "password": "oldpass123"
+                "password": "Oldpass123"
             }
         )
         user_id = create_response.json()["id"]
@@ -165,13 +168,13 @@ class TestUsersAPI:
         client.put(
             f"/api/users/{user_id}",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"password": "newpass456"}
+            json={"password": "Newpass456"}
         )
 
         # 使用新密码登录
         login_response = client.post("/api/auth/login", json={
             "username": "pwduser",
-            "password": "newpass456"
+            "password": "Newpass456"
         })
         assert login_response.status_code == 200
 
@@ -183,7 +186,7 @@ class TestUsersAPI:
             json={
                 "username": "deleteuser",
                 "email": "deleteuser@example.com",
-                "password": "pass123"
+                "password": "Delete123"
             }
         )
         user_id = create_response.json()["id"]

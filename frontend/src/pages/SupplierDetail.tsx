@@ -48,13 +48,13 @@ const SupplierDetail: React.FC = () => {
           orderCount: detail.order_count || 0,
           bankName: detail.bank_name,
           bankAccount: detail.bank_account,
-          reviews: reviewsData.map((r: any) => ({ id: String(r.id), user: r.comments || '匿名', date: r.created_at?.split('T')[0] || '', content: r.comments || '', rating: r.overall_score || 5 })) as SupplierReview[],
-          bills: billsData.map((b: any) => ({ id: String(b.id), activityName: b.activity_name || '', projectName: b.notes || '', date: b.due_date || '', status: b.status === '已付款' ? '已结清' : '待结算', amount: b.amount })) as BillRecord[],
+          reviews: reviewsData.map((r: any) => ({ id: String(r.id), user: r.reviewer_name || '匿名', date: r.created_at?.split('T')[0] || '', content: r.comments || '', rating: r.overall_score || 5 })) as SupplierReview[],
+          bills: billsData.map((b: any) => ({ id: String(b.id), activityName: b.activity_name || '', projectName: b.project_name || b.notes || '', date: b.due_date || '', status: b.status || '待结算', amount: b.amount })) as BillRecord[],
           created_at: detail.created_at,
           updated_at: detail.updated_at,
         });
-        setReviews(reviewsData.map((r: any) => ({ id: String(r.id), user: r.comments || '匿名', date: r.created_at?.split('T')[0] || '', content: r.comments || '', rating: r.overall_score || 5 })) as SupplierReview[]);
-        setBills(billsData.map((b: any) => ({ id: String(b.id), activityName: b.activity_name || '', projectName: b.notes || '', date: b.due_date || '', status: b.status === '已付款' ? '已结清' : '待结算', amount: b.amount })) as BillRecord[]);
+        setReviews(reviewsData.map((r: any) => ({ id: String(r.id), user: r.reviewer_name || '匿名', date: r.created_at?.split('T')[0] || '', content: r.comments || '', rating: r.overall_score || 5 })) as SupplierReview[]);
+        setBills(billsData.map((b: any) => ({ id: String(b.id), activityName: b.activity_name || '', projectName: b.project_name || b.notes || '', date: b.due_date || '', status: b.status || '待结算', amount: b.amount })) as BillRecord[]);
         setEditingSupplier({
           name: detail.name,
           serviceType: detail.category as any,
@@ -96,13 +96,13 @@ const SupplierDetail: React.FC = () => {
     }
   };
 
-  const handleAddReview = async (data: { content: string; rating: number }) => {
+  const handleAddReview = async (data: { reviewer_name?: string; content: string; rating: number }) => {
     if (!supplier) return;
     try {
       await addReview(parseInt(supplier.id), data);
       // 重新加载评价
       const reviewsData = await suppliersApi.getReviews(parseInt(supplier.id));
-      const newReviews = reviewsData.map((r: any) => ({ id: String(r.id), user: r.comments || '匿名', date: r.created_at?.split('T')[0] || '', content: r.comments || '', rating: r.overall_score || 5 })) as SupplierReview[];
+      const newReviews = reviewsData.map((r: any) => ({ id: String(r.id), user: r.reviewer_name || '匿名', date: r.created_at?.split('T')[0] || '', content: r.comments || '', rating: r.overall_score || 5 })) as SupplierReview[];
       setReviews(newReviews);
       setSupplier(prev => prev ? { ...prev, reviews: newReviews } : prev);
       setIsReviewModalOpen(false);
@@ -118,7 +118,7 @@ const SupplierDetail: React.FC = () => {
       await addBill(parseInt(supplier.id), data);
       // 重新加载账单
       const billsData = await suppliersApi.getBills(parseInt(supplier.id));
-      const newBills = billsData.map((b: any) => ({ id: String(b.id), activityName: b.activity_name || '', projectName: b.notes || '', date: b.due_date || '', status: b.status === '已付款' ? '已结清' : '待结算', amount: b.amount })) as BillRecord[];
+      const newBills = billsData.map((b: any) => ({ id: String(b.id), activityName: b.activity_name || '', projectName: b.project_name || b.notes || '', date: b.due_date || '', status: b.status || '待结算', amount: b.amount })) as BillRecord[];
       setBills(newBills);
       setSupplier(prev => prev ? { ...prev, bills: newBills } : prev);
       setIsBillModalOpen(false);

@@ -2,7 +2,17 @@
   "permissions": {
     "allow": [
       "Bash(npm run:*)",
-      "Bash(netstat -ano)"
+      "Bash(netstat -ano)",
+      "Bash(wc -l \"E:/AI/eventmaster-pro/backend/app/routers\"/*.py \"E:/AI/eventmaster-pro/backend/app/models\"/*.py \"E:/AI/eventmaster-pro/backend/app/services\"/*.py \"E:/AI/eventmaster-pro/backend/app/schemas\"/*.py \"E:/AI/eventmaster-pro/backend/app/repositories\"/*.py)",
+      "Bash(python -m pytest tests/ --tb=short)",
+      "Bash(curl -s http://localhost:8001/api/dashboard/stats)",
+      "Bash(python -c \"from app.models.task import Task; from app.db.init_db import init_db; init_db\\(\\); print\\('Task model loaded and tables created'\\)\")",
+      "Bash(python -m pytest tests/test_task.py -v --tb=short)",
+      "Bash(curl:*)",
+      "Bash(python -c ':*)",
+      "Bash(pkill -f \"uvicorn app.main\")",
+      "Bash(taskkill /F /IM python.exe)",
+      "Bash(python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8001)"
     ]
   }
 }

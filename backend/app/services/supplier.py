@@ -1,6 +1,7 @@
 """
 供应商 Service
 """
+import json
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from app.models.supplier import Supplier, SupplierReview, Bill
@@ -13,6 +14,22 @@ class SupplierService(BaseService[Supplier, SupplierRepository]):
 
     def __init__(self):
         super().__init__(SupplierRepository())
+
+    def create(self, db: Session, obj_in: dict) -> Supplier:
+        """创建供应商（处理 tags 字段转换）"""
+        # 将 tags 列表转换为 JSON 字符串
+        if 'tags' in obj_in and obj_in['tags'] is not None:
+            if isinstance(obj_in['tags'], list):
+                obj_in['tags'] = json.dumps(obj_in['tags'], ensure_ascii=False)
+        return self.repository.create(db, obj_in)
+
+    def update(self, db: Session, id: int, obj_in: dict) -> Optional[Supplier]:
+        """更新供应商（处理 tags 字段转换）"""
+        # 将 tags 列表转换为 JSON 字符串
+        if 'tags' in obj_in and obj_in['tags'] is not None:
+            if isinstance(obj_in['tags'], list):
+                obj_in['tags'] = json.dumps(obj_in['tags'], ensure_ascii=False)
+        return self.repository.update(db, id, obj_in)
 
     def delete(self, db: Session, id: int) -> bool:
         """删除供应商及其关联的评价和账单"""

@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PRESET_REVIEW_TAGS } from '../../constants';
-import { useReviewsData, useActivitiesData } from '../../utils/hooks';
+import { PRESET_REVIEW_TAGS } from '../../types';
 import { ReviewStatus, Activity } from '../../types';
 import {
   Activity as ActivityIcon, Wallet, TrendingUp, Star, BarChart3,
@@ -10,19 +9,19 @@ import {
 
 interface YearlyDashboardProps {
   yearFilter: string;
+  reviewActivities: any[];
+  activities: any[];
 }
 
-const YearlyDashboard: React.FC<YearlyDashboardProps> = ({ yearFilter }) => {
-  const navigate = useNavigate();
-  const { reviewActivities } = useReviewsData();
-  const { activities } = useActivitiesData();
-
+const YearlyDashboard: React.FC<YearlyDashboardProps> = ({ yearFilter, reviewActivities, activities }) => {
   const reviews = reviewActivities;
 
   // 根据年份筛选的活动和复盘
   const yearFilteredReviews = useMemo(() => {
     return reviews.filter(review => {
-      const activity = activities.find(a => a.id === review.activityId);
+      const activity = activities.find(a => String(a.id) === String(review.activityId));
+      // 如果是"所有年份"，则显示所有
+      if (yearFilter === '所有年份') return true;
       return activity?.year === yearFilter;
     });
   }, [reviews, activities, yearFilter]);
@@ -32,7 +31,9 @@ const YearlyDashboard: React.FC<YearlyDashboardProps> = ({ yearFilter }) => {
     const completedReviews = yearFilteredReviews.filter(r => r.status === ReviewStatus.COMPLETED);
 
     // 按年份筛选活动计算总花费
-    const yearActivities = activities.filter(a => a.year === yearFilter);
+    const yearActivities = yearFilter === '所有年份'
+      ? activities
+      : activities.filter(a => a.year === yearFilter);
     const totalSpend = yearActivities.reduce((sum, a) => sum + a.actualSpend, 0);
     const avgROI = completedReviews.length > 0
       ? completedReviews.reduce((sum, r) => sum + (r.conclusion?.overallScore || 0), 0) / completedReviews.length
@@ -52,20 +53,20 @@ const YearlyDashboard: React.FC<YearlyDashboardProps> = ({ yearFilter }) => {
   // 活动类型对比数据
   const categoryStats = useMemo(() => {
     const selfActivities = yearFilteredReviews
-      .map(r => activities.find(a => a.id === r.activityId))
+      .map(r => activities.find(a => String(a.id) === String(r.activityId)))
       .filter(a => a?.category === '自办活动') as Activity[];
 
     const externalActivities = yearFilteredReviews
-      .map(r => activities.find(a => a.id === r.activityId))
+      .map(r => activities.find(a => String(a.id) === String(r.activityId)))
       .filter(a => a?.category === '外部市场活动') as Activity[];
 
     const selfReviews = yearFilteredReviews.filter(r => {
-      const a = activities.find(act => act.id === r.activityId);
+      const a = activities.find(act => String(act.id) === String(r.activityId));
       return a?.category === '自办活动' && r.status === ReviewStatus.COMPLETED;
     });
 
     const externalReviews = yearFilteredReviews.filter(r => {
-      const a = activities.find(act => act.id === r.activityId);
+      const a = activities.find(act => String(act.id) === String(r.activityId));
       return a?.category === '外部市场活动' && r.status === ReviewStatus.COMPLETED;
     });
 
@@ -260,7 +261,7 @@ const YearlyDashboard: React.FC<YearlyDashboardProps> = ({ yearFilter }) => {
           {topCases.length > 0 ? (
             <div className="space-y-2">
               {topCases.map((review, index) => {
-                const activity = activities.find(a => a.id === review.activityId);
+                const activity = activities.find(a => String(a.id) === String(review.activityId));
                 return (
                   <div
                     key={review.id}

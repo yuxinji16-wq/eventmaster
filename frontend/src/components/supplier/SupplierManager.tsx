@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSuppliersData } from '../../utils/hooks';
 import { Supplier, SupplierReview, BillRecord } from '../../types';
 import { useToast } from '../../shared/Toast';
+import { AsyncState } from '../../shared/AsyncState';
 import {
   Star, Phone, User, ExternalLink, ShieldCheck, ArrowLeft, Download,
   Edit3, Plus, MessageSquare, History, FileText, Mail, MapPin,
@@ -15,7 +16,7 @@ const CATEGORIES = ['全部', '搭建', '设计', '影音', '礼品', '印刷'];
 const SupplierManager: React.FC = () => {
   const navigate = useNavigate();
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
-  const { suppliers, loading, addSupplier, updateSupplier, deleteSupplier } = useSuppliersData();
+  const { suppliers, loading, error, addSupplier, updateSupplier, deleteSupplier } = useSuppliersData();
   const [activeCategory, setActiveCategory] = useState('全部');
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -26,9 +27,12 @@ const SupplierManager: React.FC = () => {
   const filteredSuppliers = useMemo(() => {
     return suppliers.filter(s => {
       const matchesCat = activeCategory === '全部' || s.serviceType === activeCategory;
-      const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            s.contact.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            s.tags?.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
+      const name = s.name || '';
+      const contact = s.contact || '';
+      const tags = s.tags || [];
+      const matchesSearch = name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            contact.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            tags.some(t => (t || '').toLowerCase().includes(searchQuery.toLowerCase()));
       return matchesCat && matchesSearch;
     });
   }, [suppliers, activeCategory, searchQuery]);
@@ -110,65 +114,76 @@ const SupplierManager: React.FC = () => {
       </div>
 
       {/* 供应商卡片网格 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 pb-10">
-        {filteredSuppliers.map((supplier) => (
-          <div
-            key={supplier.id}
-            className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 group hover:border-indigo-400 hover:shadow-lg transition-all relative overflow-hidden flex flex-col"
-          >
-            <div className="flex justify-between items-start mb-3">
-              <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-xs font-black uppercase tracking-widest border border-indigo-100">
-                {supplier.serviceType}
-              </span>
-              <div className="flex items-center gap-1 text-amber-400">
-                <Star size={14} fill="currentColor" />
-                <span className="text-sm font-black text-slate-800">{supplier.rating}</span>
+      <AsyncState
+        loading={loading}
+        loadingText="供应商数据加载中..."
+        error={error}
+        errorTitle="供应商数据加载失败"
+        onRetry={() => window.location.reload()}
+        empty={!loading && !error && filteredSuppliers.length === 0}
+        emptyTitle="暂无供应商数据"
+        emptyDescription="请调整筛选条件或新增供应商。"
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 pb-10">
+          {filteredSuppliers.map((supplier) => (
+            <div
+              key={supplier.id}
+              className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 group hover:border-indigo-400 hover:shadow-lg transition-all relative overflow-hidden flex flex-col"
+            >
+              <div className="flex justify-between items-start mb-3">
+                <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-xs font-black uppercase tracking-widest border border-indigo-100">
+                  {supplier.serviceType}
+                </span>
+                <div className="flex items-center gap-1 text-amber-400">
+                  <Star size={14} fill="currentColor" />
+                  <span className="text-sm font-black text-slate-800">{supplier.rating}</span>
+                </div>
+              </div>
+
+              <h3 className="text-base font-black text-slate-800 mb-3 group-hover:text-indigo-600 transition-colors leading-tight line-clamp-2 flex-1">
+                {supplier.name}
+              </h3>
+
+              <div className="flex flex-wrap gap-1 mb-4">
+                {supplier.tags?.slice(0, 3).map(tag => (
+                  <span key={tag} className="text-xs font-medium text-slate-400">#{tag}</span>
+                ))}
+              </div>
+
+              <div className="space-y-2 text-sm text-slate-600 mb-4">
+                {supplier.contact && (
+                  <div className="flex items-center gap-2">
+                    <User size={14} className="text-slate-300" />
+                    <span className="font-medium truncate">{supplier.contact}</span>
+                  </div>
+                )}
+                {supplier.phone && (
+                  <div className="flex items-center gap-2">
+                    <Phone size={14} className="text-slate-300" />
+                    <span className="font-medium">{supplier.phone}</span>
+                  </div>
+                )}
+                {supplier.email && (
+                  <div className="flex items-center gap-2">
+                    <Mail size={14} className="text-slate-300" />
+                    <span className="font-medium truncate">{supplier.email}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between mt-auto">
+                <span className="text-xs text-slate-400 font-medium">合作 {supplier.orderCount || 0} 笔</span>
+                <button
+                  onClick={() => navigate(`/suppliers/${supplier.id}`)}
+                  className="text-indigo-600 text-xs font-black uppercase tracking-widest flex items-center gap-1 hover:gap-2 transition-all"
+                >
+                  查看档案 <ChevronRight size={14} />
+                </button>
               </div>
             </div>
-
-            <h3 className="text-base font-black text-slate-800 mb-3 group-hover:text-indigo-600 transition-colors leading-tight line-clamp-2 flex-1">
-              {supplier.name}
-            </h3>
-
-            <div className="flex flex-wrap gap-1 mb-4">
-              {supplier.tags?.slice(0, 3).map(tag => (
-                <span key={tag} className="text-xs font-medium text-slate-400">#{tag}</span>
-              ))}
-            </div>
-
-            <div className="space-y-2 text-sm text-slate-600 mb-4">
-              {supplier.contact && (
-                <div className="flex items-center gap-2">
-                  <User size={14} className="text-slate-300" />
-                  <span className="font-medium truncate">{supplier.contact}</span>
-                </div>
-              )}
-              {supplier.phone && (
-                <div className="flex items-center gap-2">
-                  <Phone size={14} className="text-slate-300" />
-                  <span className="font-medium">{supplier.phone}</span>
-                </div>
-              )}
-              {supplier.email && (
-                <div className="flex items-center gap-2">
-                  <Mail size={14} className="text-slate-300" />
-                  <span className="font-medium truncate">{supplier.email}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between mt-auto">
-              <span className="text-xs text-slate-400 font-medium">合作 {supplier.orderCount || 0} 笔</span>
-              <button
-                onClick={() => navigate(`/suppliers/${supplier.id}`)}
-                className="text-indigo-600 text-xs font-black uppercase tracking-widest flex items-center gap-1 hover:gap-2 transition-all"
-              >
-                查看档案 <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </AsyncState>
 
       {/* 录入/编辑 模态框 */}
       {isAddModalOpen && (
@@ -254,7 +269,7 @@ const SupplierDetailView: React.FC<{
   onBack: () => void;
   onUpdate: (updated: Supplier) => void;
   onDelete?: () => void;
-  onAddReview?: (data: { content: string; rating: number }) => void;
+  onAddReview?: (data: { reviewer_name?: string; content: string; rating: number }) => void;
   onAddBill?: (data: { activityName: string; projectName: string; amount: number; status: string; date: string }) => void;
   isReviewModalOpen?: boolean;
   setIsReviewModalOpen?: (open: boolean) => void;
@@ -305,6 +320,7 @@ const SupplierDetailView: React.FC<{
     if (onAddReview) {
       const formData = new FormData(e.currentTarget);
       await onAddReview({
+        reviewer_name: formData.get('reviewerName') as string,
         content: formData.get('content') as string,
         rating: Number(formData.get('rating')),
       });
@@ -502,6 +518,7 @@ const SupplierDetailView: React.FC<{
       {isReviewModalOpen && (
         <Modal title="新增复盘评价" onClose={() => setIsReviewModalOpen(false)} onSubmit={handleAddReview}>
           <div className="space-y-4">
+             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase">姓名</label><input required name="reviewerName" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-xl outline-none font-bold text-slate-600 shadow-inner" /></div>
              <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase">评价内容</label><textarea required name="content" rows={4} className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-xl outline-none font-medium text-slate-600 shadow-inner" /></div>
              <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase">内部评分</label><input required name="rating" type="number" step="0.5" max="5" min="1" defaultValue="5" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-xl outline-none font-bold" /></div>
           </div>

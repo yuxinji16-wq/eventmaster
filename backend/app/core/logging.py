@@ -7,11 +7,16 @@ import sys
 from datetime import datetime
 from typing import Optional, Dict, Any
 from pathlib import Path
+from logging.handlers import RotatingFileHandler
 
 
 # 日志目录
 LOG_DIR = Path("logs")
 LOG_DIR.mkdir(exist_ok=True)
+
+# 日志轮转配置
+MAX_LOG_SIZE = 10 * 1024 * 1024  # 10MB
+BACKUP_COUNT = 5  # 保留5个备份文件
 
 
 class ErrorCodeFormatter(logging.Formatter):
@@ -101,9 +106,14 @@ def setup_logging(
         )
     logger.addHandler(console_handler)
 
-    # 文件处理器（如果指定）
+    # 文件处理器（使用轮转日志，避免文件无限增长）
     if log_file:
-        file_handler = logging.FileHandler(LOG_DIR / log_file, encoding="utf-8")
+        file_handler = RotatingFileHandler(
+            LOG_DIR / log_file,
+            maxBytes=MAX_LOG_SIZE,
+            backupCount=BACKUP_COUNT,
+            encoding="utf-8"
+        )
         file_handler.setLevel(level)
         file_handler.setFormatter(DetailedFormatter())
         logger.addHandler(file_handler)

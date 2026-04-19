@@ -6,13 +6,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def admin_token(client: TestClient, db_session: Session) -> str:
     """创建超级管理员用户并返回 token"""
     response = client.post("/api/auth/register", json={
         "username": "roleadmin",
         "email": "roleadmin@example.com",
-        "password": "admin123"
+        "password": "AdminTest1"
     })
     assert response.status_code == 200
 
@@ -23,22 +23,22 @@ def admin_token(client: TestClient, db_session: Session) -> str:
 
     login_response = client.post("/api/auth/login", json={
         "username": "roleadmin",
-        "password": "admin123"
+        "password": "AdminTest1"
     })
     return login_response.json()["access_token"]
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def normal_token(client: TestClient) -> str:
     """创建普通用户并返回 token"""
     client.post("/api/auth/register", json={
         "username": "rolenormal",
         "email": "rolenormal@example.com",
-        "password": "normal123"
+        "password": "NormalTest1"
     })
     response = client.post("/api/auth/login", json={
         "username": "rolenormal",
-        "password": "normal123"
+        "password": "NormalTest1"
     })
     return response.json()["access_token"]
 
@@ -210,4 +210,19 @@ class TestRolesAPI:
             }
         )
         # HTTPBearer 在无 token 时返回 403
+        assert response.status_code == 403
+
+    def test_init_default_roles(self, client: TestClient, admin_token: str):
+        """测试初始化默认角色"""
+        response = client.post(
+            "/api/roles/init-defaults",
+            headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "message" in data or "roles" in data
+
+    def test_init_default_roles_no_auth(self, client: TestClient):
+        """测试无认证初始化默认角色"""
+        response = client.post("/api/roles/init-defaults")
         assert response.status_code == 403

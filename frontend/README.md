@@ -111,8 +111,11 @@ npm test -- --run
 ## 环境变量
 
 ```bash
+VITE_API_BASE_URL=http://localhost:8001/api
 GEMINI_API_KEY=your_gemini_api_key
 ```
+
+`VITE_API_BASE_URL` 未配置时默认使用 `http://localhost:8001/api`。
 
 ## 样式规范
 

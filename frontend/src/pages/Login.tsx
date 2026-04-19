@@ -17,6 +17,7 @@ const Login: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
     setError('');
     setIsLoading(true);
 
@@ -38,7 +39,7 @@ const Login: React.FC = () => {
           <p className="text-slate-500">市场活动全生命周期管理平台</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} data-testid="login-form" className="space-y-6">
           {error && (
             <div className="bg-rose-50 border border-rose-200 text-rose-600 px-4 py-3 rounded-xl text-sm font-bold">
               {error}
@@ -46,10 +47,11 @@ const Login: React.FC = () => {
           )}
 
           <div className="space-y-2">
-            <label className="text-sm font-bold text-slate-600">用户名</label>
+            <label htmlFor="username" className="text-sm font-bold text-slate-600">用户名</label>
             <div className="relative">
               <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
+                id="username"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -61,10 +63,11 @@ const Login: React.FC = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-bold text-slate-600">密码</label>
+            <label htmlFor="password" className="text-sm font-bold text-slate-600">密码</label>
             <div className="relative">
               <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
+                id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -85,7 +88,7 @@ const Login: React.FC = () => {
         </form>
 
         <div className="mt-6 text-center text-sm text-slate-400">
-          <p>默认账号: admin / admin123</p>
+          <p>默认账号: admin / Admin123</p>
         </div>
       </div>
     </div>

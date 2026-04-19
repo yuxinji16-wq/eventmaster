@@ -74,21 +74,24 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 ## 初始账号
 
 - 用户名：`admin`
-- 密码：`admin123`
+- 密码：`Admin123`（必须包含大写字母、小写字母和数字）
 - 权限：超级管理员
 
 ## 环境变量
 
 前端 `.env.local`:
 ```
+VITE_API_BASE_URL=http://localhost:8001/api
 GEMINI_API_KEY=your_gemini_api_key
 ```
 
 后端 `.env`:
 ```
 DATABASE_URL=sqlite:///./data/eventmaster.db
-SECRET_KEY=your-secret-key-change-in-production
+SECRET_KEY=change-me-use-a-long-random-secret
 GOOGLE_API_KEY=your_gemini_api_key
+DEBUG=false
+CORS_ORIGINS=["http://your-production-domain.com"]
 ```
 
 ## 文档

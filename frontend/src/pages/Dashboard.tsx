@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 import { TrendingUp, Users, Target, DollarSign, Calendar, BarChart2, LineChart as LineIcon, ChevronDown } from 'lucide-react';
 import { dashboardApi } from '../services/backendApi';
+import { AsyncState } from '../shared/AsyncState';
 
 // 类型定义
 interface MonthlyTrendItem {
@@ -33,34 +34,6 @@ interface DashboardData {
   activity_distribution: ActivityDistributionItem[];
 }
 
-// 模拟数据生成器（作为回退）
-const generateYearlyData = (year: string): DashboardData => {
-  const seed = parseInt(year);
-  return {
-    yearly_metrics: {
-      year,
-      budget: (80 + (seed % 5) * 5) * 10000,
-      leads: 800 + (seed % 10) * 50,
-      roi: 3.5 + (seed % 3) * 0.4,
-      completion: 70 + (seed % 7) * 4
-    },
-    monthly_trend: [
-      { month: '1月', budget: 120000 + (seed % 3) * 20000, leads: 350 + (seed % 5) * 30 },
-      { month: '2月', budget: 80000 + (seed % 2) * 15000, leads: 180 + (seed % 4) * 20 },
-      { month: '3月', budget: 520000 - (seed % 4) * 30000, leads: 780 - (seed % 3) * 40 },
-      { month: '4月', budget: 280000 + (seed % 5) * 10000, leads: 420 + (seed % 2) * 50 },
-      { month: '5月', budget: 410000 + (seed % 3) * 25000, leads: 590 + (seed % 6) * 15 },
-      { month: '6月', budget: 220000 - (seed % 2) * 10000, leads: 310 + (seed % 4) * 10 },
-    ],
-    activity_distribution: [
-      { type: '展会', count: 5 + (seed % 4), percentage: 30, color: '#6366f1' },
-      { type: '研讨会', count: 10 + (seed % 6), percentage: 50, color: '#8b5cf6' },
-      { type: '路演', count: 3 + (seed % 3), percentage: 15, color: '#ec4899' },
-      { type: '峰会', count: 2 + (seed % 2), percentage: 10, color: '#10b981' },
-    ]
-  };
-};
-
 const Dashboard: React.FC = () => {
   const [globalYear, setGlobalYear] = useState('2024');
   const [chartType, setChartType] = useState<'bar' | 'line'>('line');
@@ -71,6 +44,7 @@ const Dashboard: React.FC = () => {
   const fetchDashboardData = useCallback(async (year: string) => {
     try {
       setLoading(true);
+      setError(null);
       const response = await dashboardApi.getStats(year);
       // 将真实API响应转换为Dashboard期望的格式
       const monthlyTrend = Object.entries(response.monthly || {}).map(([month, data]: [string, any]) => ({
@@ -96,11 +70,10 @@ const Dashboard: React.FC = () => {
         activity_distribution: activityDistribution
       };
       setDashboardData(transformedData);
-      setError(null);
     } catch (err) {
       console.error('Failed to fetch dashboard data:', err);
-      setDashboardData(generateYearlyData(year));
-      setError(null);
+      setDashboardData(null);
+      setError('仪表盘数据加载失败，请检查后端服务或网络连接');
     } finally {
       setLoading(false);
     }
@@ -131,26 +104,17 @@ const Dashboard: React.FC = () => {
         }))
       };
     }
-    const mockData = generateYearlyData(globalYear);
     return {
       metrics: {
-        budget: mockData.yearly_metrics.budget / 10000,
-        leads: mockData.yearly_metrics.leads,
-        roi: mockData.yearly_metrics.roi.toFixed(1),
-        completion: mockData.yearly_metrics.completion
+        budget: 0,
+        leads: 0,
+        roi: '0.0',
+        completion: 0
       },
-      monthly: mockData.monthly_trend.map(item => ({
-        name: item.month,
-        budget: item.budget,
-        leads: item.leads
-      })),
-      distribution: mockData.activity_distribution.map(item => ({
-        name: item.type,
-        value: item.count,
-        color: item.color
-      }))
+      monthly: [],
+      distribution: []
     };
-  }, [dashboardData, globalYear]);
+  }, [dashboardData]);
 
   const trendData = useMemo(() => {
     if (dashboardData && 'monthly_trend' in dashboardData) {
@@ -167,31 +131,24 @@ const Dashboard: React.FC = () => {
         }))
       };
     }
-    const mockData = generateYearlyData(globalYear);
     return {
-      monthly: mockData.monthly_trend.map(item => ({
-        name: item.month,
-        budget: item.budget,
-        leads: item.leads
-      })),
-      distribution: mockData.activity_distribution.map(item => ({
-        name: item.type,
-        value: item.count,
-        color: item.color
-      }))
+      monthly: [],
+      distribution: []
     };
-  }, [dashboardData, globalYear]);
-
-  if (loading && !dashboardData) {
-    return (
-      <div className="flex items-center justify-center h-48">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-      </div>
-    );
-  }
+  }, [dashboardData]);
 
   return (
-    <div className="space-y-4">
+    <AsyncState
+      loading={loading && !dashboardData}
+      loadingText="仪表盘数据加载中..."
+      error={error && !dashboardData ? error : null}
+      errorTitle="仪表盘加载失败"
+      onRetry={() => fetchDashboardData(globalYear)}
+      empty={!loading && !error && trendData.monthly.length === 0 && trendData.distribution.length === 0}
+      emptyTitle="暂无可展示的仪表盘数据"
+      emptyDescription="请切换年份或补充业务数据后重试。"
+    >
+      <div className="space-y-4">
       {/* Page Header */}
       <div className="flex items-center justify-between bg-white p-4 rounded-xl shadow-sm border border-slate-100">
         <div className="flex items-center gap-3">
@@ -262,12 +219,14 @@ const Dashboard: React.FC = () => {
             <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
               <div className="flex gap-0.5 bg-white p-0.5 rounded border border-slate-100">
                 <button
+                  data-testid="chart-type-bar"
                   onClick={() => setChartType('bar')}
                   className={`p-1 rounded transition-all ${chartType === 'bar' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-indigo-400'}`}
                 >
                   <BarChart2 size={14} />
                 </button>
                 <button
+                  data-testid="chart-type-line"
                   onClick={() => setChartType('line')}
                   className={`p-1 rounded transition-all ${chartType === 'line' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-indigo-400'}`}
                 >
@@ -277,38 +236,42 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          <div className="h-48">
-            <ResponsiveContainer width="100%" height="100%">
-              {chartType === 'bar' ? (
-                <BarChart data={trendData.monthly} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: 600}} dy={5} />
-                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: 500}} />
-                  <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', padding: '8px'}} />
-                  <Bar dataKey="budget" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={20} />
-                  <Bar dataKey="leads" fill="#10b981" radius={[4, 4, 0, 0]} barSize={20} />
-                </BarChart>
-              ) : (
-                <AreaChart data={trendData.monthly} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorBudget2" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
-                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="colorLeads2" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: 600}} dy={5} />
-                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: 500}} />
-                  <Tooltip contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', padding: '8px'}} />
-                  <Area type="monotone" dataKey="budget" stroke="#6366f1" strokeWidth={3} fill="url(#colorBudget2)" animationDuration={1000} />
-                  <Area type="monotone" dataKey="leads" stroke="#10b981" strokeWidth={3} fill="url(#colorLeads2)" animationDuration={1000} />
-                </AreaChart>
-              )}
-            </ResponsiveContainer>
+          <div className="h-48 min-w-0">
+            {trendData.monthly.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-slate-300 text-sm">暂无趋势数据</div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                {chartType === 'bar' ? (
+                  <BarChart data={trendData.monthly} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: 600}} dy={5} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: 500}} />
+                    <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', padding: '8px'}} />
+                    <Bar dataKey="budget" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={20} />
+                    <Bar dataKey="leads" fill="#10b981" radius={[4, 4, 0, 0]} barSize={20} />
+                  </BarChart>
+                ) : (
+                  <AreaChart data={trendData.monthly} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorBudget2" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
+                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="colorLeads2" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: 600}} dy={5} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: 500}} />
+                    <Tooltip contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', padding: '8px'}} />
+                    <Area type="monotone" dataKey="budget" stroke="#6366f1" strokeWidth={3} fill="url(#colorBudget2)" animationDuration={1000} />
+                    <Area type="monotone" dataKey="leads" stroke="#10b981" strokeWidth={3} fill="url(#colorLeads2)" animationDuration={1000} />
+                  </AreaChart>
+                )}
+              </ResponsiveContainer>
+            )}
           </div>
 
           <div className="flex justify-center gap-6 mt-3">
@@ -327,35 +290,39 @@ const Dashboard: React.FC = () => {
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
           <h3 className="text-base font-bold text-slate-800 mb-1">活动类型分布</h3>
           <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider mb-3">{globalYear}</p>
-          <div className="h-44 flex flex-col items-center justify-center relative">
-            <ResponsiveContainer width="100%" height={160}>
-              <PieChart>
-                <Pie
-                  data={trendData.distribution}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={70}
-                  paddingAngle={8}
-                  dataKey="value"
-                  stroke="none"
-                  animationBegin={200}
-                  animationDuration={1000}
-                >
-                  {trendData.distribution.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={{borderRadius: '10px', border: 'none', boxShadow: '0 2px 4px -1px rgb(0 0 0 / 0.1)'}} />
-              </PieChart>
-            </ResponsiveContainer>
+          <div className="h-44 flex flex-col items-center justify-center relative min-w-0">
+            {trendData.distribution.length === 0 ? (
+              <div className="text-slate-300 text-sm">暂无分布数据</div>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={160}>
+                  <PieChart>
+                    <Pie
+                      data={trendData.distribution}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={70}
+                      paddingAngle={8}
+                      dataKey="value"
+                      stroke="none"
+                      animationBegin={200}
+                      animationDuration={1000}
+                    >
+                      {trendData.distribution.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={{borderRadius: '10px', border: 'none', boxShadow: '0 2px 4px -1px rgb(0 0 0 / 0.1)'}} />
+                  </PieChart>
+                </ResponsiveContainer>
 
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-8 text-center pointer-events-none">
-              <p className="text-2xl font-black text-slate-800 leading-none">{trendData.distribution.reduce((a,b)=>a+b.value, 0)}</p>
-              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Events</p>
-            </div>
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-8 text-center pointer-events-none">
+                  <p className="text-2xl font-black text-slate-800 leading-none">{trendData.distribution.reduce((a,b)=>a+b.value, 0)}</p>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Events</p>
+                </div>
 
-            <div className="w-full mt-1 space-y-2">
+                <div className="w-full mt-1 space-y-2">
               {trendData.distribution.map((item) => (
                 <div key={item.name} className="flex items-center justify-between text-xs group">
                   <div className="flex items-center gap-2">
@@ -365,11 +332,14 @@ const Dashboard: React.FC = () => {
                   <span className="font-bold text-slate-800 bg-slate-50 px-2 py-0.5 rounded">{item.value}</span>
                 </div>
               ))}
-            </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </AsyncState>
   );
 };
 

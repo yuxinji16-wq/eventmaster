@@ -19,11 +19,19 @@ export default defineConfig(({ mode }) => {
           '@': path.resolve(__dirname, '.'),
         }
       },
+      preview: {
+        port: 5173,
+        host: '0.0.0.0',
+        appType: 'spa',
+      },
       test: {
         globals: true,
         environment: 'happy-dom',
         setupFiles: ['./src/test/setup.ts'],
-        include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+        include: [
+          'src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}',
+          'tests/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'
+        ],
       }
     };
 });

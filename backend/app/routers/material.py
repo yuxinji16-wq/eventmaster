@@ -39,6 +39,29 @@ def list_materials(
     return material_service.get_all(db, skip, limit)
 
 
+@router.get("/warehousing-logs", response_model=List[WarehousingLogResponse])
+def list_all_warehousing_logs(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """获取全部入库记录"""
+    return warehousing_service.get_all(db, skip, limit)
+
+
+@router.get("/withdrawal-logs", response_model=List[WithdrawalLogResponse])
+def list_all_withdrawal_logs(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
+    activity_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    """获取全部出库记录，可按活动过滤"""
+    if activity_id:
+        return withdrawal_service.get_by_activity(db, activity_id, skip, limit)
+    return withdrawal_service.get_all(db, skip, limit)
+
+
 @router.get("/{material_id}", response_model=MaterialResponse)
 def get_material(material_id: int, db: Session = Depends(get_db)):
     """获取物料详情"""
@@ -98,6 +121,7 @@ class WithdrawalRequest(BaseModel):
     count: int
     user: str
     reason: str = ""
+    activity_id: Optional[int] = None
 
 
 @router.post("/{material_id}/warehousing", response_model=WarehousingLogResponse)
@@ -149,7 +173,9 @@ def create_withdrawal_for_material(
         "count": data.count,
         "user": data.user,
         "reason": data.reason,
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "activity_id": data.activity_id,
+        "status": "领用中",
     }
     return withdrawal_service.create_withdrawal(db, log_data)
 
@@ -158,3 +184,12 @@ def create_withdrawal_for_material(
 def create_withdrawal(data: WithdrawalLogCreate, db: Session = Depends(get_db)):
     """创建出库记录"""
     return withdrawal_service.create_withdrawal(db, data.model_dump())
+
+
+@router.patch("/withdrawal/{log_id}/return", response_model=WithdrawalLogResponse)
+def return_withdrawal(log_id: int, return_count: Optional[float] = None, db: Session = Depends(get_db)):
+    """标记领用记录归还"""
+    log = withdrawal_service.mark_returned(db, log_id, return_count)
+    if not log:
+        raise MaterialException.not_found(log_id)
+    return log

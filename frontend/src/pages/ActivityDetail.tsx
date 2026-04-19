@@ -6,14 +6,14 @@
  * - 状态更改
  * - 数据同步
  */
-import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Activity, ActivityStatus, ActivityTask, ActivityStage, ACTIVITY_STAGES, RiskLevel,
   ExpenseItem, Opportunity, Material, Supplier, PRESET_REVIEW_TAGS
 } from '../types';
-import { useActivitiesData, useSuppliersData, useMaterialsData, useOpportunitiesData, useReviewData } from '../utils/hooks';
-import { materialsApi } from '../services/backendApi';
+import { useActivitiesData, useSuppliersData, useMaterialsData, useLeadsData, useReviewData, useReviewsData } from '../utils/hooks';
+import { materialsApi, activitiesApi, tasksApi, budgetApi, suppliersApi } from '../services/backendApi';
 import { useToast } from '../shared/Toast';
 import {
   Card, Button, Modal, Input, Select
@@ -23,7 +23,7 @@ import {
   Zap, Wallet, Users, Package, TrendingUp, ClipboardCheck,
   ArrowLeft, AlertCircle, CheckCircle2, Loader2,
   User, ChevronDown, ChevronUp, Edit, Star, Trash2,
-  FileText, UploadCloud, Download, Sparkles
+  FileText, UploadCloud, Download, Sparkles, Upload
 } from 'lucide-react';
 
 // ============ 常量 ============
@@ -79,15 +79,6 @@ const MATERIAL_CATEGORIES = [
   { value: '其他', label: '其他' },
 ];
 
-const OPPORTUNITY_STAGES = [
-  { value: '潜在客户', label: '潜在客户' },
-  { value: '需求调研', label: '需求调研' },
-  { value: '方案报价', label: '方案报价' },
-  { value: '商务谈判', label: '商务谈判' },
-  { value: '成交', label: '成交' },
-  { value: '失效', label: '失效' },
-];
-
 const ACTIVITY_STATUS_OPTIONS = [
   { value: '待启动', label: '待启动' },
   { value: '进行中', label: '进行中' },
@@ -131,19 +122,33 @@ function getStatusColor(status: string): { bg: string; text: string } {
   return colors[status] || { bg: 'bg-slate-100', text: 'text-slate-600' };
 }
 
-function formatCurrency(amount: number): string {
+function formatCurrency(amount: number | undefined | null): string {
+  if (amount == null || isNaN(amount)) return '¥0';
   if (amount >= 10000) return `¥${(amount / 10000).toFixed(1)}w`;
   return `¥${amount.toLocaleString()}`;
 }
 
 function getStageIndex(stage: string): number {
-  return ACTIVITY_STAGES.indexOf(stage as ActivityStage);
+  // 处理状态名称映射：'进行中' -> '执行中'
+  const stageMap: Record<string, string> = {
+    '进行中': '执行中',
+    '执行中': '执行中',
+    '待启动': '待启动',
+    '筹备中': '筹备中',
+    '复盘中': '复盘中',
+    '已完成': '已完成',
+    '已取消': '已完成',
+  };
+  const normalizedStage = stageMap[stage] || stage;
+  const index = ACTIVITY_STAGES.indexOf(normalizedStage as ActivityStage);
+  return index >= 0 ? index : 0; // 默认返回第一个阶段
 }
 
 function calculateRiskLevel(tasks: ActivityTask[], budget: number, actualSpend: number): RiskLevel {
-  const overdueTasks = tasks.filter(t => t.status !== '已完成' && new Date(t.dueDate) < new Date());
+  const taskList = tasks || [];
+  const overdueTasks = taskList.filter(t => t.status !== '已完成' && new Date(t.dueDate) < new Date());
   if (overdueTasks.length > 0) return 'danger';
-  const p0Pending = tasks.filter(t => t.priority === 'P0' && t.status !== '已完成');
+  const p0Pending = taskList.filter(t => t.priority === 'P0' && t.status !== '已完成');
   if (p0Pending.length > 0) return 'warning';
   if (budget > 0) {
     const rate = actualSpend / budget;
@@ -154,11 +159,12 @@ function calculateRiskLevel(tasks: ActivityTask[], budget: number, actualSpend: 
 }
 
 function getStatusSummary(activity: Activity, tasks: ActivityTask[]): string {
-  const overdueTasks = tasks.filter(t => t.status !== '已完成' && new Date(t.dueDate) < new Date());
+  const taskList = tasks || [];
+  const overdueTasks = taskList.filter(t => t.status !== '已完成' && new Date(t.dueDate) < new Date());
   if (overdueTasks.length > 0) return `⚠️ ${overdueTasks.length} 项任务已延期，需立即处理`;
-  const pending = tasks.filter(t => t.status !== '已完成');
+  const pending = taskList.filter(t => t.status !== '已完成');
   if (pending.length > 0) return `📋 ${pending.length} 项任务待完成`;
-  if (activity.status === '已完成') return `✅ 活动已完成，留资 ${activity.leads} 人`;
+  if (activity.status === '已完成') return `✅ 活动已完成，留资 ${activity.leads || 0} 人`;
   return `🎯 ${activity.status || '筹备中'}，当前无阻塞任务`;
 }
 
@@ -325,17 +331,27 @@ function MaterialRow({ material, onStatusChange }: { material: any; onStatusChan
   );
 }
 
-function OpportunityRow({ opportunity, onStageChange }: { opportunity: any; onStageChange: (stage: string) => void }) {
+function OpportunityRow({ opportunity }: { opportunity: any }) {
   return (
     <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100">
-      <div>
-        <p className="font-medium text-slate-700">{opportunity.clientName}</p>
-        <p className="text-xs text-slate-400">¥{opportunity.estimatedValue.toLocaleString()}</p>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="font-medium text-slate-700">{opportunity.clientName}</p>
+          <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-600">
+            {opportunity.region || '区域待定'}
+          </span>
+        </div>
+        <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
+          <span>{opportunity.contactName}</span>
+          <span>{opportunity.phone}</span>
+        </div>
+        {opportunity.requirement && (
+          <p className="text-xs text-slate-500 mt-1 truncate max-w-[200px]">{opportunity.requirement}</p>
+        )}
       </div>
-      <select value={opportunity.status || ''} onChange={(e) => onStageChange(e.target.value)}
-        className={`px-3 py-1 rounded-lg text-xs font-medium border ${getStatusColor(opportunity.status).bg} ${getStatusColor(opportunity.status).text}`}>
-        {OPPORTUNITY_STAGES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-      </select>
+      <div className="text-xs text-slate-400 ml-2">
+        {opportunity.owner}
+      </div>
     </div>
   );
 }
@@ -425,6 +441,201 @@ function TaskModal({ task, onClose, onSave, onDelete }: {
   );
 }
 
+// 任务导入弹窗
+function TaskImportModal({ onClose, onImport }: {
+  onClose: () => void;
+  onImport: (tasks: ActivityTask[]) => void;
+}) {
+  const [importMode, setImportMode] = useState<'paste' | 'file'>('paste');
+  const [pasteData, setPasteData] = useState('');
+  const [fileName, setFileName] = useState('');
+  const [parsedTasks, setParsedTasks] = useState<ActivityTask[]>([]);
+  const [error, setError] = useState('');
+
+  // 解析粘贴的数据（支持空格或Tab分隔）
+  const parsePastedData = (text: string): ActivityTask[] => {
+    const lines = text.trim().split('\n').filter(line => line.trim());
+    const tasks: ActivityTask[] = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      // 支持Tab分隔、空格分隔、逗号分隔
+      let parts = line.split('\t');
+      if (parts.length < 4) {
+        parts = line.split(/\s{1,}/);
+      }
+      if (parts.length < 4) {
+        parts = line.split(',');
+      }
+
+      if (parts.length >= 4) {
+        const cleanPart = (p: string) => p.trim().replace(/^["']|["']$/g, '');
+        const name = cleanPart(parts[0]);
+        const assignee = cleanPart(parts[1]);
+        const dueDate = cleanPart(parts[2]);
+        const priorityStr = cleanPart(parts[3]).toUpperCase();
+
+        if (name && assignee) {
+          let priority: 'P0' | 'P1' | 'P2' = 'P1';
+          if (priorityStr === 'P0') priority = 'P0';
+          else if (priorityStr === 'P2') priority = 'P2';
+
+          tasks.push({
+            id: `t-import-${Date.now()}-${i}`,
+            name,
+            assignee,
+            dueDate: dueDate || new Date().toISOString().split('T')[0],
+            priority,
+            status: '未开始',
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
+    }
+    return tasks;
+  };
+
+  // 处理文件导入
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      const tasks = parsePastedData(text);
+      if (tasks.length > 0) {
+        setParsedTasks(tasks);
+        setError('');
+      } else {
+        setError('无法解析文件，请确保格式正确');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // 处理粘贴预览
+  const handlePastePreview = () => {
+    if (!pasteData.trim()) {
+      setError('请粘贴数据');
+      return;
+    }
+    const tasks = parsePastedData(pasteData);
+    if (tasks.length > 0) {
+      setParsedTasks(tasks);
+      setError('');
+    } else {
+      setError('无法解析数据，请确保每行有4个部分：任务名 负责人 日期 优先级');
+    }
+  };
+
+  // 下载模板
+  const downloadTemplate = () => {
+    const template = '任务名称 负责人 截止日期 优先级\nexample task 张三 2024-03-15 P1';
+    const blob = new Blob([template], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '任务导入模板.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <Modal title="导入任务" onClose={onClose} size="lg">
+      <div className="space-y-4">
+        {/* 模式切换 */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => { setImportMode('paste'); setParsedTasks([]); setError(''); }}
+            className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all ${importMode === 'paste' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+          >
+            粘贴数据
+          </button>
+          <button
+            onClick={() => { setImportMode('file'); setParsedTasks([]); setError(''); }}
+            className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all ${importMode === 'file' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+          >
+            文件导入
+          </button>
+        </div>
+
+        {importMode === 'paste' ? (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-500">粘贴Excel/Sheets数据</label>
+              <button onClick={downloadTemplate} className="text-xs text-indigo-600 hover:text-indigo-700 font-bold">下载模板</button>
+            </div>
+            <textarea
+              value={pasteData}
+              onChange={(e) => { setPasteData(e.target.value); setParsedTasks([]); }}
+              placeholder="从Excel或Google Sheets粘贴数据，支持空格或Tab分隔&#10;格式：任务名称 负责人 截止日期 优先级&#10;示例：&#10;场地确认    张三    2024-03-15    P0&#10;物料采购    李四    2024-03-20    P1"
+              rows={6}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-sm text-slate-700 resize-none"
+            />
+            <button onClick={handlePastePreview} className="w-full py-2 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200">
+              预览解析结果
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <label className="block">
+              <input type="file" accept=".csv,.txt" onChange={handleFileChange} className="hidden" />
+              <div className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center cursor-pointer hover:border-indigo-400 transition-colors">
+                <Upload size={32} className="mx-auto mb-2 text-slate-300" />
+                <p className="text-sm font-bold text-slate-500">点击选择文件</p>
+                <p className="text-xs text-slate-400 mt-1">支持 CSV、TXT 格式</p>
+              </div>
+            </label>
+            {fileName && <p className="text-sm text-slate-500">已选择: {fileName}</p>}
+          </div>
+        )}
+
+        {error && (
+          <div className="p-3 bg-rose-50 text-rose-600 rounded-xl text-sm font-medium">
+            {error}
+          </div>
+        )}
+
+        {/* 解析结果预览 */}
+        {parsedTasks.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-bold text-emerald-600">解析到 {parsedTasks.length} 个任务：</p>
+            <div className="max-h-48 overflow-y-auto space-y-1">
+              {parsedTasks.map((task, i) => (
+                <div key={i} className="flex items-center gap-2 p-2 bg-emerald-50 rounded-lg text-xs">
+                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-black ${
+                    task.priority === 'P0' ? 'bg-rose-100 text-rose-600' :
+                    task.priority === 'P1' ? 'bg-amber-100 text-amber-600' :
+                    'bg-slate-100 text-slate-600'
+                  }`}>{task.priority}</span>
+                  <span className="flex-1 font-medium text-slate-700 truncate">{task.name}</span>
+                  <span className="text-slate-400">{task.assignee}</span>
+                  <span className="text-slate-400">{task.dueDate}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="flex justify-end gap-2 mt-6">
+        <Button variant="ghost" onClick={onClose}>取消</Button>
+        <Button
+          variant="primary"
+          onClick={() => { if (parsedTasks.length > 0) { onImport(parsedTasks); onClose(); } }}
+          disabled={parsedTasks.length === 0}
+          icon={<Download size={14} />}
+        >
+          确认导入 ({parsedTasks.length})
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
 function ExpenseModal({ expense, onClose, onSave }: {
   expense?: ExpenseItem | null;
   onClose: () => void;
@@ -469,44 +680,83 @@ function ExpenseModal({ expense, onClose, onSave }: {
 }
 
 function SupplierModal({ onClose, onSave }: { onClose: () => void; onSave: (data: any) => void }) {
+  const [supplierOptions, setSupplierOptions] = useState<any[]>([]);
+  const [selectedId, setSelectedId] = useState('');
+  const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({
-    name: '',
-    serviceType: '搭建',
-    contact: '',
-    phone: '',
+    serviceType: '',
+    amount: 0,
   });
 
+  useEffect(() => {
+    suppliersApi.getList()
+      .then(data => {
+        setSupplierOptions(data);
+        if (data[0]) {
+          setSelectedId(String(data[0].id));
+          setForm(prev => ({ ...prev, serviceType: data[0].category || '其他' }));
+        }
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const selectedSupplier = supplierOptions.find(s => String(s.id) === selectedId);
+
   return (
-    <Modal title="新增供应商" onClose={onClose} size="md">
+    <Modal title="关联供应商库供应商" onClose={onClose} size="md">
       <div className="space-y-4">
         <div>
-          <label className="text-xs font-bold text-slate-500 uppercase">供应商名称 *</label>
-          <Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="输入供应商名称" />
+          <label className="text-xs font-bold text-slate-500 uppercase">选择供应商 *</label>
+          <Select
+            value={selectedId}
+            onChange={e => {
+              setSelectedId(e.target.value);
+              const supplier = supplierOptions.find(s => String(s.id) === e.target.value);
+              setForm(prev => ({ ...prev, serviceType: supplier?.category || '其他' }));
+            }}
+            options={loading ? [{ value: '', label: '加载中...' }] : supplierOptions.map(s => ({ value: String(s.id), label: s.name }))}
+          />
         </div>
         <div>
           <label className="text-xs font-bold text-slate-500 uppercase">服务类型</label>
           <Select value={form.serviceType} onChange={e => setForm({...form, serviceType: e.target.value})} options={SERVICE_TYPES} />
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="text-xs font-bold text-slate-500 uppercase">联系人</label>
-            <Input value={form.contact} onChange={e => setForm({...form, contact: e.target.value})} placeholder="输入联系人" />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-slate-500 uppercase">电话</label>
-            <Input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} placeholder="输入电话" />
-          </div>
+        <div>
+          <label className="text-xs font-bold text-slate-500 uppercase">合同金额</label>
+          <Input type="number" value={form.amount} onChange={e => setForm({...form, amount: +e.target.value})} placeholder="输入合同金额（如无可不填）" />
         </div>
+        {selectedSupplier && (
+          <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">
+            联系人：{selectedSupplier.contact || '-'} · 电话：{selectedSupplier.phone || '-'}
+          </div>
+        )}
       </div>
       <div className="flex justify-end gap-2 mt-6">
         <Button variant="ghost" onClick={onClose}>取消</Button>
-        <Button variant="primary" onClick={() => { onSave(form); onClose(); }}>添加</Button>
+        <Button
+          variant="primary"
+          onClick={() => {
+            if (!selectedSupplier) return;
+            onSave({
+              supplierId: selectedSupplier.id,
+              name: selectedSupplier.name,
+              serviceType: form.serviceType || selectedSupplier.category || '其他',
+              contact: selectedSupplier.contact || '',
+              phone: selectedSupplier.phone || '',
+              amount: form.amount,
+            });
+            onClose();
+          }}
+          disabled={!selectedSupplier}
+        >
+          关联
+        </Button>
       </div>
     </Modal>
   );
 }
 
-function MaterialModal({ onClose, onSave }: { onClose: () => void; onSave: (data: any) => void }) {
+function MaterialModal({ activityId, onClose, onSave }: { activityId: string; onClose: () => void; onSave: (data: any) => void }) {
   const toast = useToast();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -524,9 +774,7 @@ function MaterialModal({ onClose, onSave }: { onClose: () => void; onSave: (data
       if (categoryFilter) params.category = categoryFilter;
       if (search) params.keyword = search;
       const response = await materialsApi.getList(params);
-      // 处理后端返回的数组格式或 { materials: [] } 格式
-      const data = Array.isArray(response) ? response : (response as any).materials || [];
-      setMaterials(data);
+      setMaterials(response);
     } catch (err) {
       console.error('加载物料失败:', err);
       setMaterials([]);
@@ -576,6 +824,7 @@ function MaterialModal({ onClose, onSave }: { onClose: () => void; onSave: (data
         count: withdrawCount,
         user: '活动领用',
         reason: `活动物料领用: ${selectedMaterial.name}`,
+        activity_id: parseInt(activityId, 10),
       });
       onSave({
         warehouseId: selectedMaterial.id,
@@ -719,31 +968,87 @@ function MaterialModal({ onClose, onSave }: { onClose: () => void; onSave: (data
 }
 
 function OpportunityModal({ onClose, onSave }: { onClose: () => void; onSave: (data: any) => void }) {
+  const toast = useToast();
   const [form, setForm] = useState({
-    clientName: '',
-    estimatedValue: 0,
-    status: '潜在客户',
+    clientName: '',        // 客户单位
+    contactName: '',       // 姓名
+    phone: '',             // 联系方式
+    email: '',             // 邮箱
+    requirement: '',        // 需求描述
+    region: '华北',         // 所属区域（默认华北）
+    owner: '',             // 对接人
   });
 
   return (
-    <Modal title="新增商机" onClose={onClose} size="md">
+    <Modal title="新增线索" onClose={onClose} size="md">
       <div className="space-y-4">
         <div>
-          <label className="text-xs font-bold text-slate-500 uppercase">客户名称 *</label>
-          <Input value={form.clientName} onChange={e => setForm({...form, clientName: e.target.value})} placeholder="输入客户名称" />
+          <label className="text-xs font-bold text-slate-500 uppercase">客户单位 *</label>
+          <Input value={form.clientName} onChange={e => setForm({...form, clientName: e.target.value})} placeholder="输入客户单位名称" />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase">姓名 *</label>
+            <Input value={form.contactName} onChange={e => setForm({...form, contactName: e.target.value})} placeholder="输入联系人姓名" />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase">联系方式 *</label>
+            <Input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} placeholder="输入电话" />
+          </div>
         </div>
         <div>
-          <label className="text-xs font-bold text-slate-500 uppercase">预计金额</label>
-          <Input type="number" value={form.estimatedValue} onChange={e => setForm({...form, estimatedValue: +e.target.value})} placeholder="输入预计金额" />
+          <label className="text-xs font-bold text-slate-500 uppercase">邮箱</label>
+          <Input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} placeholder="输入邮箱" />
         </div>
         <div>
-          <label className="text-xs font-bold text-slate-500 uppercase">阶段</label>
-          <Select value={form.status} onChange={e => setForm({...form, status: e.target.value})} options={OPPORTUNITY_STAGES} />
+          <label className="text-xs font-bold text-slate-500 uppercase">需求描述 *</label>
+          <textarea
+            value={form.requirement}
+            onChange={e => setForm({...form, requirement: e.target.value})}
+            placeholder="描述客户需求..."
+            className="w-full mt-1 px-4 py-2 border border-slate-200 rounded-xl outline-none resize-none"
+            rows={3}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase">所属区域 *</label>
+            <Select
+              value={form.region}
+              onChange={e => setForm({...form, region: e.target.value})}
+              options={[
+                { value: '华北', label: '华北' },
+                { value: '华东', label: '华东' },
+                { value: '华南', label: '华南' },
+                { value: '华中', label: '华中' },
+                { value: '西南', label: '西南' },
+                { value: '西北', label: '西北' },
+                { value: '东北', label: '东北' },
+                { value: '港澳台', label: '港澳台' },
+                { value: '海外', label: '海外' },
+              ]}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase">对接人 *</label>
+            <Input value={form.owner} onChange={e => setForm({...form, owner: e.target.value})} placeholder="输入对接人" />
+          </div>
         </div>
       </div>
       <div className="flex justify-end gap-2 mt-6">
         <Button variant="ghost" onClick={onClose}>取消</Button>
-        <Button variant="primary" onClick={() => { onSave(form); onClose(); }}>添加</Button>
+        <Button variant="primary" onClick={() => {
+          if (!form.clientName.trim() || !form.contactName.trim() || !form.phone.trim()) {
+            toast.error('请填写客户单位、姓名和联系方式');
+            return;
+          }
+          if (!form.region || !form.owner) {
+            toast.error('请填写区域和对接人');
+            return;
+          }
+          onSave(form);
+          onClose();
+        }}>添加</Button>
       </div>
     </Modal>
   );
@@ -751,17 +1056,28 @@ function OpportunityModal({ onClose, onSave }: { onClose: () => void; onSave: (d
 
 // ============ Tab 内容组件 ============
 
-function ProgressTab({ tasks, onAddTask, onEditTask, onCompleteTask, onDeleteTask }: {
+function ProgressTab({ tasks, onAddTask, onEditTask, onCompleteTask, onDeleteTask, onImportTasks }: {
   tasks: ActivityTask[];
   onAddTask: () => void;
   onEditTask: (t: ActivityTask) => void;
   onCompleteTask: (id: string) => void;
   onDeleteTask: (id: string) => void;
+  onImportTasks: () => void;
 }) {
   const [showAll, setShowAll] = useState(false);
-  const pendingTasks = tasks.filter(t => t.status !== '已完成');
+  const taskList = tasks || [];
+
+  // 按优先级和创建时间排序：P0 > P1 > P2，同优先级按创建时间倒序（最新的在前）
+  const sortedTasks = [...taskList].sort((a, b) => {
+    const priorityOrder: Record<string, number> = { 'P0': 0, 'P1': 1, 'P2': 2 };
+    const priorityDiff = (priorityOrder[a.priority] || 99) - (priorityOrder[b.priority] || 99);
+    if (priorityDiff !== 0) return priorityDiff;
+    return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+  });
+
+  const pendingTasks = sortedTasks.filter((t: ActivityTask) => t.status !== '已完成');
   const nextTask = pendingTasks[0];
-  const displayTasks = showAll ? tasks : tasks.slice(0, 5);
+  const displayTasks = showAll ? sortedTasks : sortedTasks.slice(0, 5);
 
   return (
     <div className="space-y-4">
@@ -791,6 +1107,7 @@ function ProgressTab({ tasks, onAddTask, onEditTask, onCompleteTask, onDeleteTas
               {showAll ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               {showAll ? '收起' : '展开全部'}
             </Button>
+            <Button size="sm" variant="outline" icon={<Download size={14} />} onClick={onImportTasks}>导入</Button>
             <Button size="sm" variant="primary" icon={<Plus size={14} />} onClick={onAddTask}>新增</Button>
           </div>
         </div>
@@ -817,8 +1134,8 @@ function BudgetTab({ activity, expenses, onAddExpense, onEditExpense, onDeleteEx
   onDeleteExpense: (id: string) => void;
 }) {
   const [showDetails, setShowDetails] = useState(true);
-  const totalPlanned = activity.budget;
-  const totalActual = expenses.reduce((sum, e) => sum + e.actualAmount, 0) || activity.actualSpend;
+  const totalPlanned = activity?.budget || 0;
+  const totalActual = (expenses || []).reduce((sum: number, e: ExpenseItem) => sum + (e.actualAmount || 0), 0) || activity?.actualSpend || 0;
   const remaining = totalPlanned - totalActual;
   const executionRate = totalPlanned > 0 ? (totalActual / totalPlanned * 100) : 0;
 
@@ -939,41 +1256,53 @@ function MaterialTabContent({ materials, onAdd, onStatusChange }: {
   );
 }
 
-function OpportunityTabContent({ opportunities, onAdd, onStageChange }: {
+function OpportunityTabContent({ opportunities, onAdd, onOpen }: {
   opportunities: any[];
   onAdd: () => void;
-  onStageChange: (id: string, stage: string) => void;
+  onOpen: (id: string) => void;
 }) {
-  const totalValue = opportunities.reduce((sum, o) => sum + o.estimatedValue, 0);
-  const highIntent = opportunities.filter(o => ['商务谈判', '方案报价'].includes(o.status)).length;
+  const oppList = opportunities || [];
+
+  // 计算活动线索统计
+  const stats = useMemo(() => {
+    const total = oppList.length;
+    const transferred = oppList.filter((o: any) => o.status === '已转销售').length;
+    const converted = oppList.filter((o: any) => o.converted || o.conversionStatus === '已转化').length;
+    const notConverted = oppList.filter((o: any) => o.conversionStatus === '未转化').length;
+    const conversionRate = transferred > 0 ? ((converted / transferred) * 100).toFixed(1) : '0';
+    return { total, transferred, converted, notConverted, conversionRate };
+  }, [oppList]);
 
   return (
     <div className="space-y-4">
       <StatusPanelItem
         icon={<TrendingUp size={18} />}
-        title="商机"
+        title="商机线索"
         stats={[
-          { label: '商机总数', value: opportunities.length },
-          { label: '高意向', value: highIntent, color: 'text-indigo-600' },
-          { label: '预计金额', value: formatCurrency(totalValue), color: 'text-emerald-600' },
+          { label: '线索总数', value: stats.total },
+          { label: '已转销售', value: stats.transferred },
+          { label: '已转化', value: stats.converted },
+          { label: '转化率', value: `${stats.conversionRate}%` },
         ]}
-        status={highIntent > 0 ? { type: 'success', text: `${highIntent} 个高意向` } : { type: 'neutral', text: '暂无高意向' }}
+        status={stats.total > 0 ? { type: 'success', text: `已获取 ${stats.total} 条线索` } : { type: 'neutral', text: '暂无线索' }}
       />
       <Card>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-slate-800">关联商机 ({opportunities.length})</h3>
+          <h3 className="font-bold text-slate-800">关联线索 ({oppList.length})</h3>
           <Button size="sm" variant="primary" icon={<Plus size={14} />} onClick={onAdd}>新增</Button>
         </div>
-        {opportunities.length > 0 ? (
+        {oppList.length > 0 ? (
           <div className="space-y-2">
-            {opportunities.map(o => (
-              <OpportunityRow key={o.id} opportunity={o} onStageChange={(stage) => onStageChange(o.id, stage)} />
+            {oppList.map(o => (
+              <div key={o.id} onClick={() => onOpen(o.id)} className="cursor-pointer">
+                <OpportunityRow opportunity={o} />
+              </div>
             ))}
           </div>
         ) : (
           <div className="text-center py-8 text-slate-400">
             <TrendingUp size={24} className="mx-auto mb-2" />
-            <p>暂无关联商机</p>
+            <p>暂无关联线索</p>
             <p className="text-xs mt-1">点击上方按钮添加</p>
           </div>
         )}
@@ -992,7 +1321,7 @@ function ReviewTab({ activityId }: { activityId: string }) {
   const [generatingAi, setGeneratingAi] = useState(false);
 
   const canReview = activityId && activityId.trim() !== '';
-  const submittedFeedbacks = feedbacks.filter(fb => fb.is_submitted);
+  const submittedFeedbacks = (feedbacks || []).filter(fb => fb.is_submitted);
 
   const handleAddFeedback = async (data: any) => {
     try {
@@ -1306,6 +1635,7 @@ function FeedbackModal({ onClose, onSave }: {
   onClose: () => void;
   onSave: (data: any) => void;
 }) {
+  const toast = useToast();
   const [form, setForm] = useState({
     evaluator_id: `user-${Date.now()}`,
     evaluator_name: '',
@@ -1345,7 +1675,7 @@ function FeedbackModal({ onClose, onSave }: {
 
   const handleSave = () => {
     if (!form.evaluator_name.trim()) {
-      alert('请输入评价人姓名');
+      toast.warning('请填写评价人姓名');
       return;
     }
     onSave(form);
@@ -1480,9 +1810,10 @@ function FeedbackModal({ onClose, onSave }: {
 const ActivityDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const toast = useToast();
   const { activities, loading, updateActivity, deleteActivity } = useActivitiesData();
-  const { createReviewForActivity, fetchReviewActivities } = useReviewData(id || '');
+  const { createReviewForActivity, fetchReviewActivities } = useReviewsData();
 
   // 活动状态
   const [activity, setActivity] = useState<Activity | null>(null);
@@ -1490,45 +1821,62 @@ const ActivityDetail: React.FC = () => {
   const [editForm, setEditForm] = useState<Partial<Activity>>({});
   const [activeTab, setActiveTab] = useState('progress');
 
-  // 活动数据 localStorage Key
-  const getMaterialsStorageKey = (activityId: string) => `activity_${activityId}_materials`;
-
-  // 从 localStorage 加载物料数据
-  const loadMaterialsFromStorage = useCallback((activityId: string): any[] => {
-    try {
-      const stored = localStorage.getItem(getMaterialsStorageKey(activityId));
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
+  // 检查 URL 参数，自动打开任务弹窗或切换标签
+  useEffect(() => {
+    const addTask = searchParams.get('addTask');
+    if (addTask === 'true') {
+      // 自动打开新增任务弹窗
+      setEditingTask(null);
+      setTaskModalOpen(true);
+      // 切换到进度标签
+      setActiveTab('progress');
+      // 清除 URL 参数（使用 replace 避免刷新）
+      const currentPath = window.location.pathname;
+      navigate(currentPath, { replace: true });
     }
-  }, []);
+  }, [searchParams, navigate]);
 
-  // 保存物料数据到 localStorage
-  const saveMaterialsToStorage = useCallback((activityId: string, materials: any[]) => {
-    try {
-      localStorage.setItem(getMaterialsStorageKey(activityId), JSON.stringify(materials));
-    } catch (err) {
-      console.error('保存物料数据失败:', err);
-    }
-  }, []);
+  // 物料数据状态（从 API 加载）
+  const [materials, setMaterials] = useState<any[]>([]);
+  const [materialsLoading, setMaterialsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!id) return;
+    materialsApi.getWithdrawalLogs({ activityId: parseInt(id) })
+      .then(logs => {
+        setMaterials(logs.map((log: any) => ({
+          id: String(log.id),
+          name: log.material_name,
+          category: '',
+          type: '领用',
+          stock: log.count,
+          unit: log.unit || '个',
+          status: log.status || '领用中',
+          usageCount: 0,
+          lastUpdated: log.date || log.created_at,
+          warehouseId: log.material_id,
+          user: log.user,
+          reason: log.reason,
+        })));
+      })
+      .catch(error => console.error('加载活动物料领用失败:', error));
+  }, [id]);
+
+  // 使用统一的商机线索 Hook
+  const { leads, addLead, updateLead, deleteLead } = useLeadsData();
 
   // 本地数据状态
   const [tasks, setTasks] = useState<ActivityTask[]>([]);
   const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [materials, setMaterials] = useState<any[]>([]);
-  const [opportunities, setOpportunities] = useState<any[]>([]);
 
-  // 物料数据变化时保存到 localStorage
-  useEffect(() => {
-    if (id && materials.length >= 0) {
-      saveMaterialsToStorage(id, materials);
-    }
-  }, [id, materials, saveMaterialsToStorage]);
+  // 从统一存储中筛选当前活动的商机线索
+  const opportunities = leads.filter(lead => lead.activityId === id);
 
   // 弹窗状态
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<ActivityTask | null>(null);
+  const [taskImportOpen, setTaskImportOpen] = useState(false);
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<ExpenseItem | null>(null);
   const [supplierModalOpen, setSupplierModalOpen] = useState(false);
@@ -1579,25 +1927,54 @@ const ActivityDetail: React.FC = () => {
     }
   };
 
-  // 加载活动数据
+  // 加载活动数据（从后端API加载任务）
   useEffect(() => {
     if (id && activities.length > 0) {
       const found = activities.find(a => a.id === id);
       if (found) {
         setActivity(found);
         setEditForm(found);
-        if (found.tasks) setTasks(found.tasks);
-        if (found.expenses) setExpenses(found.expenses);
       }
     }
-    // 从 localStorage 加载物料数据
-    if (id) {
-      const storedMaterials = loadMaterialsFromStorage(id);
-      if (storedMaterials.length > 0) {
-        setMaterials(storedMaterials);
+  }, [id, activities]);
+
+  // 从后端API加载任务数据
+  useEffect(() => {
+    if (!id) return;
+    const fetchTasks = async () => {
+      try {
+        const apiTasks = await tasksApi.getByActivity(parseInt(id));
+        const adaptedTasks = apiTasks.map(adaptTaskToFrontend);
+        setTasks(adaptedTasks);
+      } catch (error) {
+        console.error('加载任务失败:', error);
       }
-    }
-  }, [id, activities, loadMaterialsFromStorage]);
+    };
+    fetchTasks();
+  }, [id]);
+
+  // 从后端API加载费用明细
+  useEffect(() => {
+    if (!id) return;
+    const fetchExpenses = async () => {
+      try {
+        const logs = await budgetApi.getLogs(parseInt(id));
+        const adaptedExpenses = logs.map((log: any) => ({
+          id: String(log.id),
+          name: log.name,
+          category: log.category,
+          plannedAmount: log.planned_amount || 0,
+          actualAmount: log.amount,
+          status: log.status,
+          date: log.date,
+        }));
+        setExpenses(adaptedExpenses);
+      } catch (error) {
+        console.error('加载费用明细失败:', error);
+      }
+    };
+    fetchExpenses();
+  }, [id]);
 
   // 计算风险
   const riskLevel = useMemo(() => {
@@ -1623,49 +2000,215 @@ const ActivityDetail: React.FC = () => {
     }
   };
 
-  // 任务操作
+  // 任务操作 - 使用后端API
   const handleAddTask = () => { setEditingTask(null); setTaskModalOpen(true); };
   const handleEditTask = (t: ActivityTask) => { setEditingTask(t); setTaskModalOpen(true); };
-  const handleSaveTask = (data: Partial<ActivityTask>) => {
-    if (editingTask) {
-      setTasks(prev => prev.map(t => t.id === editingTask.id ? { ...t, ...data } : t));
-    } else {
-      const newTask: ActivityTask = { id: `task-${Date.now()}`, name: data.name!, assignee: data.assignee!, dueDate: data.dueDate!, priority: data.priority || 'P1', status: data.status || '未开始', createdAt: new Date().toISOString(), description: data.description };
-      setTasks(prev => [newTask, ...prev]);
+
+  // 同步任务到状态
+  const syncTasksToActivity = useCallback((updatedTasks: ActivityTask[]) => {
+    setTasks(updatedTasks);
+  }, []);
+
+  // 将后端任务转换为前端格式
+  const adaptTaskToFrontend = (apiTask: any): ActivityTask => ({
+    id: String(apiTask.id),
+    name: apiTask.name,
+    description: apiTask.description,
+    assignee: apiTask.assignee || '',
+    dueDate: apiTask.due_date || '',
+    priority: (apiTask.priority || 'P2') as any,
+    status: (apiTask.status || '未开始') as any,
+    createdAt: apiTask.created_at,
+    activityId: String(apiTask.activity_id),
+    completedAt: apiTask.status === '已完成' ? apiTask.updated_at : undefined,
+  });
+
+  // 将前端任务转换为后端格式
+  const adaptTaskToBackend = (task: Partial<ActivityTask>, activityId: string) => ({
+    activity_id: parseInt(activityId),
+    name: task.name,
+    description: task.description,
+    assignee: task.assignee,
+    due_date: task.dueDate,
+    priority: task.priority || 'P2',
+    status: task.status || '未开始',
+  });
+
+  // 保存任务（创建或更新）
+  const handleSaveTask = async (data: Partial<ActivityTask>) => {
+    if (!id) return;
+    try {
+      if (editingTask) {
+        // 更新已有任务
+        await tasksApi.update(parseInt(editingTask.id), adaptTaskToBackend(data, id));
+        const updatedTasks = tasks.map(t => t.id === editingTask.id ? { ...t, ...data } : t);
+        syncTasksToActivity(updatedTasks);
+        toast.success('任务已更新');
+      } else {
+        // 创建新任务
+        const newApiTask = await tasksApi.create(adaptTaskToBackend(data, id));
+        const newTask = adaptTaskToFrontend(newApiTask);
+        syncTasksToActivity([newTask, ...tasks]);
+        toast.success('任务已创建');
+      }
+    } catch (error) {
+      console.error('保存任务失败:', error);
+      toast.error('保存任务失败');
     }
-    toast.success(editingTask ? '任务已更新' : '任务已创建');
-  };
-  const handleCompleteTask = (taskId: string) => {
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: '已完成', completedAt: new Date().toISOString() } : t));
-    toast.success('任务完成');
-  };
-  const handleDeleteTask = (taskId: string) => {
-    setTasks(prev => prev.filter(t => t.id !== taskId));
-    toast.success('任务已删除');
   };
 
-  // 预算操作
+  // 完成任务
+  const handleCompleteTask = async (taskId: string) => {
+    try {
+      await tasksApi.updateStatus(parseInt(taskId), '已完成');
+      const updatedTasks = tasks.map(t => t.id === taskId ? { ...t, status: '已完成' as const, completedAt: new Date().toISOString() } : t);
+      syncTasksToActivity(updatedTasks);
+      toast.success('任务完成');
+    } catch (error) {
+      console.error('完成任务失败:', error);
+      toast.error('完成任务失败');
+    }
+  };
+
+  // 删除任务
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      await tasksApi.delete(parseInt(taskId));
+      const updatedTasks = tasks.filter(t => t.id !== taskId);
+      syncTasksToActivity(updatedTasks);
+      toast.success('任务已删除');
+    } catch (error) {
+      console.error('删除任务失败:', error);
+      toast.error('删除任务失败');
+    }
+  };
+
+  // 批量导入任务
+  const handleImportTasks = async (importedTasks: ActivityTask[]) => {
+    if (!id) return;
+    try {
+      const tasksToCreate = importedTasks.map(t => adaptTaskToBackend(t, id));
+      const newApiTasks = await tasksApi.batchCreate(tasksToCreate);
+      const newTasks = newApiTasks.map(adaptTaskToFrontend);
+      const updatedTasks = [...tasks, ...newTasks];
+      syncTasksToActivity(updatedTasks);
+      toast.success('导入成功', `成功导入 ${newTasks.length} 个任务`);
+    } catch (error) {
+      console.error('导入任务失败:', error);
+      toast.error('导入任务失败');
+    }
+  };
+
+  // 预算操作 - 使用后端API持久化
   const handleAddExpense = () => { setEditingExpense(null); setExpenseModalOpen(true); };
   const handleEditExpense = (e: ExpenseItem) => { setEditingExpense(e); setExpenseModalOpen(true); };
-  const handleSaveExpense = (data: Partial<ExpenseItem>) => {
-    if (editingExpense) {
-      setExpenses(prev => prev.map(e => e.id === editingExpense.id ? { ...e, ...data } : e));
-    } else {
-      const newExpense: ExpenseItem = { id: `exp-${Date.now()}`, name: data.name!, category: (data.category || '其他') as any, plannedAmount: data.plannedAmount || 0, actualAmount: data.actualAmount || 0, status: '正常', date: new Date().toISOString().split('T')[0] };
-      setExpenses(prev => [...prev, newExpense]);
+
+  const handleSaveExpense = async (data: Partial<ExpenseItem>) => {
+    if (!id) return;
+    try {
+      if (editingExpense) {
+        await budgetApi.updateLog(parseInt(editingExpense.id), {
+          name: data.name || '',
+          amount: data.actualAmount || data.plannedAmount || 0,
+          planned_amount: data.plannedAmount || 0,
+          category: data.category || '其他',
+          status: data.status || editingExpense.status || '待结算',
+          type: 'expense',
+        } as any);
+        toast.success('预算项已更新');
+      } else {
+        // 新建模式：调用API持久化到预算库
+        await budgetApi.createLog({
+          activity_id: parseInt(id),
+          name: data.name || '',
+          amount: data.actualAmount || data.plannedAmount || 0,
+          planned_amount: data.plannedAmount || 0,
+          category: data.category || '其他',
+          notes: '',
+          status: data.status || '待结算',
+          type: 'expense',
+        } as any);
+        toast.success('预算项已创建');
+      }
+      const logs = await budgetApi.getLogs(parseInt(id));
+      const adaptedExpenses = logs.map((log: any) => ({
+        id: String(log.id),
+        name: log.name,
+        category: log.category,
+        plannedAmount: log.planned_amount || 0,
+        actualAmount: log.amount,
+        status: log.status,
+        date: log.date,
+      }));
+      setExpenses(adaptedExpenses);
+      const totalActual = adaptedExpenses.reduce((sum, item) => sum + (item.actualAmount || 0), 0);
+      await updateActivity(parseInt(id), { actualSpend: totalActual });
+    } catch (error) {
+      console.error('保存预算项失败:', error);
+      toast.error('保存失败');
     }
-    toast.success(editingExpense ? '预算项已更新' : '预算项已创建');
-  };
-  const handleDeleteExpense = (expenseId: string) => {
-    setExpenses(prev => prev.filter(e => e.id !== expenseId));
-    toast.success('预算项已删除');
   };
 
-  // 供应商操作
-  const handleAddSupplier = (data: any) => {
-    const newSupplier = { id: `sup-${Date.now()}`, name: data.name, serviceType: data.serviceType, contact: data.contact, phone: data.phone, rating: 5, orderCount: 0, tags: [] };
-    setSuppliers(prev => [...prev, newSupplier]);
-    toast.success('供应商已添加');
+  const handleDeleteExpense = async (expenseId: string) => {
+    try {
+      await budgetApi.deleteLog(parseInt(expenseId));
+      setExpenses(prev => prev.filter(e => e.id !== expenseId));
+      toast.success('预算项已删除');
+    } catch (error) {
+      console.error('删除预算项失败:', error);
+      toast.error('删除失败');
+    }
+  };
+
+  // 供应商操作 - 使用后端API持久化到供应商账单
+  const handleAddSupplier = async (data: any) => {
+    if (!id) return;
+    try {
+      const supplierId = parseInt(data.supplierId || data.id, 10);
+      if (!supplierId) {
+        toast.error('请选择供应商库中的供应商');
+        return;
+      }
+      const existingSupplier = suppliers.find(s => s.id === String(supplierId));
+
+      // 添加账单到供应商（关联到当前活动）
+      await suppliersApi.addBill(supplierId, {
+        activity_name: activityName,
+        project_name: data.serviceType || '服务',
+        amount: data.amount || 0,
+        status: '执行中',
+        date: new Date().toISOString().split('T')[0],
+      });
+
+      // 刷新供应商列表
+      const updatedSuppliers = [...suppliers];
+      if (!existingSupplier) {
+        updatedSuppliers.push({
+          id: String(supplierId),
+          name: data.name,
+          serviceType: data.serviceType || '其他',
+          contact: data.contact || '',
+          phone: data.phone || '',
+          rating: 5,
+          orderCount: 1,
+          tags: [],
+        });
+      } else {
+        // 更新已有供应商的订单数
+        const idx = updatedSuppliers.findIndex(s => s.id === String(supplierId));
+        if (idx >= 0) {
+          updatedSuppliers[idx] = {
+            ...updatedSuppliers[idx],
+            orderCount: (updatedSuppliers[idx].orderCount || 0) + 1,
+          };
+        }
+      }
+      setSuppliers(updatedSuppliers);
+      toast.success('供应商已添加');
+    } catch (error) {
+      console.error('添加供应商失败:', error);
+      toast.error('添加失败');
+    }
   };
   const handleConfirmSupplier = (supplierId: string) => {
     setSuppliers(prev => prev.map(s => s.id === supplierId ? { ...s, orderCount: (s.orderCount || 0) + 1 } : s));
@@ -1691,22 +2234,103 @@ const ActivityDetail: React.FC = () => {
       lastUpdated: new Date().toISOString(),
       warehouseId: data.warehouseId,
     };
-    setMaterials(prev => [...prev, newMaterial]);
+    const updated = [...materials, newMaterial];
+    setMaterials(updated);
   };
   const handleMaterialStatusChange = (materialId: string, status: string) => {
-    setMaterials(prev => prev.map(m => m.id === materialId ? { ...m, status } : m));
+    const updated = materials.map(m => m.id === materialId ? { ...m, status } : m);
+    setMaterials(updated);
     toast.success('库存状态已更新');
   };
 
-  // 商机操作
-  const handleAddOpportunity = (data: any) => {
-    const newOpp = { id: `opp-${Date.now()}`, clientName: data.clientName, estimatedValue: data.estimatedValue, status: data.status };
-    setOpportunities(prev => [...prev, newOpp]);
-    toast.success('商机已添加');
+  // 获取当前活动名称
+  const currentActivity = activities.find(a => a.id === id);
+  const activityName = currentActivity?.name || '未知活动';
+
+  // 从后端API加载供应商关联（通过活动名称查询账单）
+  useEffect(() => {
+    if (!activityName || activityName === '未知活动') return;
+    const fetchSupplierRelations = async () => {
+      try {
+        // 获取所有供应商，检查是否有该活动的账单
+        const allSuppliers = await suppliersApi.getList();
+        const relatedSuppliers = [];
+
+        for (const supplier of allSuppliers) {
+          try {
+            const bills = await suppliersApi.getBills(supplier.id);
+            const hasActivityBill = bills.some((bill: any) => bill.activity_name === activityName);
+            if (hasActivityBill) {
+              relatedSuppliers.push({
+                id: String(supplier.id),
+                name: supplier.name,
+                serviceType: supplier.category || '其他',
+                contact: supplier.contact || '',
+                phone: supplier.phone || '',
+                rating: supplier.rating || 5,
+                orderCount: supplier.order_count || 0,
+                tags: supplier.tags || [],
+              });
+            }
+          } catch { /* 跳过获取账单失败的供应商 */ }
+        }
+        setSuppliers(relatedSuppliers);
+      } catch (error) {
+        console.error('加载供应商关联失败:', error);
+      }
+    };
+    fetchSupplierRelations();
+  }, [activityName]);
+
+  // 商机操作 - 使用统一的商机线索存储
+  const handleAddOpportunity = async (data: any) => {
+    if (!id) return;
+    // 添加到统一商机线索存储（自动同步到商机管理页面）
+    const lead = await addLead({
+      clientName: data.clientName,     // 客户单位
+      contactName: data.contactName,   // 姓名
+      contact: data.contactName,
+      phone: data.phone,              // 联系方式
+      email: data.email || '',        // 邮箱
+      requirement: data.requirement,  // 需求描述
+      sourceType: 'activity',         // 来源类型：活动获取
+      sourceName: activityName,       // 来源名称：活动名称
+      activityId: id,                 // 关联活动ID
+      region: data.region,            // 所属区域
+      owner: data.owner,              // 对接人
+      status: '未跟进',
+      leadLevel: '待评估',
+      transferredToSales: false,
+      converted: false,
+    });
+    toast.success('线索已添加');
+    navigate(`/opportunities/${lead.id}`);
   };
-  const handleOpportunityStageChange = (oppId: string, stage: string) => {
-    setOpportunities(prev => prev.map(o => o.id === oppId ? { ...o, status: stage } : o));
-    toast.success('商机阶段已更新');
+
+  // 更新商机线索
+  const handleUpdateOpportunity = (leadId: string, data: any) => {
+    updateLead(leadId, data);
+    toast.success('线索已更新');
+  };
+
+  // 删除商机线索
+  const handleDeleteOpportunity = (leadId: string) => {
+    if (!window.confirm('确定要删除这条线索吗？')) return;
+    deleteLead(leadId);
+    toast.success('线索已删除');
+  };
+
+  // 商机阶段变更（已废弃，保留兼容性）
+  const handleOpportunityStageChange = async (oppId: string, stage: string) => {
+    // 现在不需要阶段管理了
+  };
+
+  // 商机来源显示
+  const getOpportunitySource = (lead: any) => {
+    if (lead.sourceType === 'activity') {
+      return { type: 'activity', text: activityName };
+    }
+    return { type: 'manual', text: '自主录入' };
   };
 
   if (loading) {
@@ -1722,14 +2346,14 @@ const ActivityDetail: React.FC = () => {
     );
   }
 
-  const totalExpenses = expenses.reduce((sum, e) => sum + e.actualAmount, 0) || activity.actualSpend;
-  const executionRate = activity.budget > 0 ? (totalExpenses / activity.budget) * 100 : 0;
-  const currentStage = activity.currentStage || activity.status;
+  const totalExpenses = (expenses || []).reduce((sum: number, e: ExpenseItem) => sum + (e.actualAmount || 0), 0) || (activity?.actualSpend || 0);
+  const executionRate = (activity?.budget || 0) > 0 ? (totalExpenses / (activity?.budget || 0)) * 100 : 0;
+  const currentStage = activity?.currentStage || activity?.status || '待启动';
 
   return (
     <div className="space-y-4">
       {/* 返回 */}
-      <button onClick={() => navigate('/activities')} className="flex items-center gap-2 text-slate-500 hover:text-slate-700"><ArrowLeft size={16} /> 返回活动列表</button>
+      <button onClick={() => navigate(`/activities?year=${activity.year}`)} className="flex items-center gap-2 text-slate-500 hover:text-slate-700"><ArrowLeft size={16} /> 返回活动列表</button>
 
       {/* ========== 1. 顶部状态卡 ========== */}
       <div className={`rounded-xl p-6 text-white ${
@@ -1772,15 +2396,15 @@ const ActivityDetail: React.FC = () => {
                   <option key={opt.value} value={opt.value} style={{ color: '#1e293b', background: 'white' }}>{opt.label}</option>
                 ))}
               </select>
-              <span className="px-3 py-1 bg-white/10 rounded-xl text-xs font-bold">{activity.category}</span>
+              <span className="px-3 py-1 bg-white/10 rounded-xl text-xs font-bold">{activity?.category || '未知'}</span>
               <span className={`px-3 py-1 rounded-xl text-xs font-bold ${riskLevel === 'healthy' ? 'bg-emerald-500/30' : riskLevel === 'warning' ? 'bg-amber-500/30' : 'bg-rose-500/30'}`}>
                 {riskLevel === 'healthy' ? '正常' : riskLevel === 'warning' ? '预警' : '风险'}
               </span>
             </div>
-            <h1 className="text-2xl font-black mb-2">{activity.name}</h1>
+            <h1 className="text-2xl font-black mb-2">{activity?.name || '未命名活动'}</h1>
             <div className="flex items-center gap-4 text-sm text-white/80">
-              <span className="flex items-center gap-1"><Calendar size={14} /> {activity.date}</span>
-              <span className="flex items-center gap-1"><MapPin size={14} /> {activity.location}</span>
+              <span className="flex items-center gap-1"><Calendar size={14} /> {activity?.date || '-'}</span>
+              <span className="flex items-center gap-1"><MapPin size={14} /> {activity?.location || '-'}</span>
             </div>
           </div>
           <div className="flex gap-2">
@@ -1801,7 +2425,7 @@ const ActivityDetail: React.FC = () => {
           <p className="text-sm">{statusSummary}</p>
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard label="预算" value={formatCurrency(activity.budget)} />
+          <StatCard label="预算" value={formatCurrency(activity?.budget)} />
           <StatCard label="已支出" value={formatCurrency(totalExpenses)} />
           <StatCard label="到场人数" value={String(activity.leads || 0)} />
           <StatCard label="执行率" value={`${executionRate.toFixed(1)}%`} />
@@ -1854,11 +2478,11 @@ const ActivityDetail: React.FC = () => {
               ))}
             </div>
             <div className="p-4">
-              {activeTab === 'progress' && <ProgressTab tasks={tasks} onAddTask={handleAddTask} onEditTask={handleEditTask} onCompleteTask={handleCompleteTask} onDeleteTask={handleDeleteTask} />}
+              {activeTab === 'progress' && <ProgressTab tasks={tasks} onAddTask={handleAddTask} onEditTask={handleEditTask} onCompleteTask={handleCompleteTask} onDeleteTask={handleDeleteTask} onImportTasks={() => setTaskImportOpen(true)} />}
               {activeTab === 'budget' && <BudgetTab activity={activity} expenses={expenses} onAddExpense={handleAddExpense} onEditExpense={handleEditExpense} onDeleteExpense={handleDeleteExpense} />}
               {activeTab === 'supplier' && <SupplierTabContent suppliers={suppliers} onAdd={() => setSupplierModalOpen(true)} onConfirm={handleConfirmSupplier} onStatusChange={handleSupplierStatusChange} />}
               {activeTab === 'material' && <MaterialTabContent materials={materials} onAdd={() => setMaterialModalOpen(true)} onStatusChange={handleMaterialStatusChange} />}
-              {activeTab === 'opportunity' && <OpportunityTabContent opportunities={opportunities} onAdd={() => setOpportunityModalOpen(true)} onStageChange={handleOpportunityStageChange} />}
+              {activeTab === 'opportunity' && <OpportunityTabContent opportunities={opportunities} onAdd={() => setOpportunityModalOpen(true)} onOpen={(oppId) => navigate(`/opportunities/${oppId}`)} />}
               {activeTab === 'review' && <ReviewTab activityId={id || ''} />}
             </div>
           </div>
@@ -1951,9 +2575,10 @@ const ActivityDetail: React.FC = () => {
 
       {/* 弹窗 */}
       {taskModalOpen && <TaskModal task={editingTask} onClose={() => setTaskModalOpen(false)} onSave={handleSaveTask} onDelete={editingTask ? handleDeleteTask : undefined} />}
+      {taskImportOpen && <TaskImportModal onClose={() => setTaskImportOpen(false)} onImport={handleImportTasks} />}
       {expenseModalOpen && <ExpenseModal expense={editingExpense} onClose={() => setExpenseModalOpen(false)} onSave={handleSaveExpense} />}
       {supplierModalOpen && <SupplierModal onClose={() => setSupplierModalOpen(false)} onSave={handleAddSupplier} />}
-      {materialModalOpen && <MaterialModal onClose={() => setMaterialModalOpen(false)} onSave={handleAddMaterial} />}
+      {materialModalOpen && <MaterialModal activityId={id || ''} onClose={() => setMaterialModalOpen(false)} onSave={handleAddMaterial} />}
       {opportunityModalOpen && <OpportunityModal onClose={() => setOpportunityModalOpen(false)} onSave={handleAddOpportunity} />}
 
       {/* 删除确认弹窗 */}

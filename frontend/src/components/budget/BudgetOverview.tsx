@@ -31,6 +31,9 @@ interface BudgetOverviewProps {
   setSearchQuery: (q: string) => void;
   categoryFilter: string;
   setCategoryFilter: (f: string) => void;
+  industryFilter: string;
+  setIndustryFilter: (f: string) => void;
+  availableIndustries: string[];
   statusFilter: string;
   setStatusFilter: (f: string) => void;
   onYearChange: (y: string) => void;
@@ -46,7 +49,7 @@ interface BudgetOverviewProps {
 const BudgetOverview: React.FC<BudgetOverviewProps> = ({
   selectedYear, yearlyQuota, yearStats, categoryStats, monthlyTrend,
   overBudgetActivities, highRiskActivities, filteredActivities,
-  searchQuery, setSearchQuery, categoryFilter, setCategoryFilter, statusFilter, setStatusFilter,
+  searchQuery, setSearchQuery, categoryFilter, setCategoryFilter, industryFilter, setIndustryFilter, availableIndustries, statusFilter, setStatusFilter,
   onYearChange, onQuotaModalOpen, onViewBudgetStructure, getBudgetStatus, roiAnalysis
 }) => {
   return (
@@ -112,26 +115,30 @@ const BudgetOverview: React.FC<BudgetOverviewProps> = ({
 
       {/* 月度趋势 + 活动类型对比 + 风险预警 + ROI分析 */}
       <div className="grid grid-cols-4 gap-4">
-        {/* 月度预算趋势 */}
+        {/* 行业预算分布 */}
         <div className="col-span-2 bg-white rounded-xl p-5 border border-slate-100">
           <h3 className="font-black text-slate-800 mb-4 flex items-center gap-2">
-            <BarChart3 size={18} className="text-indigo-500" /> 月度预算趋势
+            <BarChart3 size={18} className="text-indigo-500" /> 行业预算分布
           </h3>
-          <div className="h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={monthlyTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="month" tick={{ fontSize: 10, fontWeight: 'bold' }} stroke="#94a3b8" />
-                <YAxis tick={{ fontSize: 10, fontWeight: 'bold' }} stroke="#94a3b8" tickFormatter={(v) => `¥${v}w`} />
-                <RechartsTooltip
-                  contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  formatter={(value: number) => [`¥${value.toFixed(1)}万`, '']}
-                />
-                <Legend wrapperStyle={{ fontSize: '11px' }} />
-                <Area type="monotone" dataKey="budget" name="预算" stroke="#6366f1" fill="#c7d2fe" strokeWidth={2} />
-                <Area type="monotone" dataKey="actual" name="实际" stroke="#10b981" fill="#a7f3d0" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
+          <div className="h-56 min-w-0">
+            {monthlyTrend.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-slate-300 text-sm">暂无趋势数据</div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={monthlyTrend}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="month" tick={{ fontSize: 10, fontWeight: 'bold' }} stroke="#94a3b8" />
+                  <YAxis tick={{ fontSize: 10, fontWeight: 'bold' }} stroke="#94a3b8" tickFormatter={(v) => `¥${v}w`} />
+                  <RechartsTooltip
+                    contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                    formatter={(value: number) => [`¥${value.toFixed(1)}万`, '']}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '11px' }} />
+                  <Area type="monotone" dataKey="budget" name="预算" stroke="#6366f1" fill="#c7d2fe" strokeWidth={2} />
+                  <Area type="monotone" dataKey="actual" name="实际" stroke="#10b981" fill="#a7f3d0" strokeWidth={2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
 
@@ -350,6 +357,16 @@ const BudgetOverview: React.FC<BudgetOverviewProps> = ({
             <option value="外部市场活动">外部活动</option>
           </select>
           <select
+            value={industryFilter}
+            onChange={(e) => setIndustryFilter(e.target.value)}
+            className="appearance-none border border-slate-200 rounded-xl pl-4 pr-10 py-2 text-sm font-bold outline-none cursor-pointer hover:border-indigo-300 bg-slate-50 text-slate-600"
+          >
+            <option value="所有行业">所有行业</option>
+            {availableIndustries.map(industry => (
+              <option key={industry} value={industry}>{industry}</option>
+            ))}
+          </select>
+          <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className="appearance-none border border-slate-200 rounded-xl pl-4 pr-10 py-2 text-sm font-bold outline-none cursor-pointer hover:border-indigo-300 bg-slate-50 text-slate-600"
@@ -367,9 +384,10 @@ const BudgetOverview: React.FC<BudgetOverviewProps> = ({
         <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-400 uppercase">
           <div className="col-span-3">活动名称</div>
           <div className="col-span-1">类型</div>
+          <div className="col-span-1">行业</div>
           <div className="col-span-2">预算 / 实际</div>
           <div className="col-span-1">差额</div>
-          <div className="col-span-2">执行率</div>
+          <div className="col-span-1">执行率</div>
           <div className="col-span-1">状态</div>
           <div className="col-span-2">操作</div>
         </div>
@@ -394,6 +412,9 @@ const BudgetOverview: React.FC<BudgetOverviewProps> = ({
                     {activity.category === '自办活动' ? '自办' : '外部'}
                   </span>
                 </div>
+                <div className="col-span-1">
+                  <span className="text-xs font-bold text-slate-500">{activity.industry || '未设置'}</span>
+                </div>
                 <div className="col-span-2">
                   <p className="text-sm">
                     <span className="text-slate-500">¥{(activity.budget / 10000).toFixed(0)}w</span>
@@ -408,7 +429,7 @@ const BudgetOverview: React.FC<BudgetOverviewProps> = ({
                     {variance > 0 ? '+' : ''}{(variance / 10000).toFixed(1)}w
                   </span>
                 </div>
-                <div className="col-span-2">
+                <div className="col-span-1">
                   <div className="flex items-center gap-2">
                     <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
                       <div

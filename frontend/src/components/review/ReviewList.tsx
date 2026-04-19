@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PRESET_REVIEW_TAGS } from '../../constants';
-import { useReviewsData, useActivitiesData } from '../../utils/hooks';
+import { PRESET_REVIEW_TAGS } from '../../types';
 import { ReviewStatus, ReviewTag } from '../../types';
 import { Search, ClipboardCheck, Star } from 'lucide-react';
 
@@ -15,6 +14,8 @@ interface ReviewListProps {
   yearFilter: string;
   categoryFilter: string;
   setCategoryFilter: (val: string) => void;
+  reviewActivities: any[];
+  activities: any[];
 }
 
 const ReviewList: React.FC<ReviewListProps> = ({
@@ -24,19 +25,20 @@ const ReviewList: React.FC<ReviewListProps> = ({
   setStatusFilter,
   yearFilter,
   categoryFilter,
-  setCategoryFilter
+  setCategoryFilter,
+  reviewActivities,
+  activities
 }) => {
   const navigate = useNavigate();
-  const { reviewActivities } = useReviewsData();
-  const { activities } = useActivitiesData();
-
   const reviews = reviewActivities;
 
   // 筛选后的复盘列表
   const filteredReviews = useMemo(() => {
     return reviews.filter(review => {
-      const activity = activities.find(a => a.id === review.activityId);
-      const matchesSearch = activity?.name.toLowerCase().includes(searchQuery.toLowerCase()) || false;
+      // 确保类型一致
+      const activity = activities.find(a => String(a.id) === String(review.activityId));
+      const activityName = activity?.name || '';
+      const matchesSearch = activityName.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesStatus = statusFilter === '所有状态' || review.status === statusFilter;
       const matchesYear = yearFilter === '所有年份' || activity?.year === yearFilter;
       const matchesCategory = categoryFilter === '所有类型' || activity?.category === categoryFilter;
@@ -97,7 +99,7 @@ const ReviewList: React.FC<ReviewListProps> = ({
 
         <div className="divide-y divide-slate-100">
           {filteredReviews.map(review => {
-            const activity = activities.find(a => a.id === review.activityId);
+            const activity = activities.find(a => String(a.id) === String(review.activityId));
             if (!activity) return null;
 
             const submittedCount = review.feedbacks.filter(f => f.isSubmitted).length;

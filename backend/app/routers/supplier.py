@@ -29,19 +29,39 @@ def list_suppliers(
     db: Session = Depends(get_db)
 ):
     """获取供应商列表"""
+    from app.models.supplier import Bill
+
     if category:
-        return supplier_service.get_by_category(db, category, skip, limit)
-    if keyword:
-        return supplier_service.search(db, keyword, skip, limit)
-    return supplier_service.get_all(db, skip, limit)
+        suppliers = supplier_service.get_by_category(db, category, skip, limit)
+    elif keyword:
+        suppliers = supplier_service.search(db, keyword, skip, limit)
+    else:
+        suppliers = supplier_service.get_all(db, skip, limit)
+
+    for supplier in suppliers:
+        supplier.order_count = db.query(Bill).filter(Bill.supplier_id == supplier.id).count()
+    return suppliers
+
+
+@router.get("/bills/pending", response_model=List[BillResponse])
+def list_pending_bills(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """获取待付款账单"""
+    return bill_service.get_pending(db, skip, limit)
 
 
 @router.get("/{supplier_id}", response_model=SupplierResponse)
 def get_supplier(supplier_id: int, db: Session = Depends(get_db)):
     """获取供应商详情"""
+    from app.models.supplier import Bill
+
     supplier = supplier_service.get(db, supplier_id)
     if not supplier:
         raise SupplierException.not_found(supplier_id)
+    supplier.order_count = db.query(Bill).filter(Bill.supplier_id == supplier.id).count()
     return supplier
 
 
@@ -49,7 +69,11 @@ def get_supplier(supplier_id: int, db: Session = Depends(get_db)):
 def create_supplier(data: SupplierCreate, db: Session = Depends(get_db)):
     """创建供应商"""
     try:
-        return supplier_service.create(db, data.model_dump())
+        supplier_data = data.model_dump()
+        # 同步 category 到 service_type（数据库使用 service_type）
+        if supplier_data.get('category') and not supplier_data.get('service_type'):
+            supplier_data['service_type'] = supplier_data['category']
+        return supplier_service.create(db, supplier_data)
     except Exception as e:
         raise SupplierException.creation_failed(reason=str(e))
 
@@ -57,7 +81,11 @@ def create_supplier(data: SupplierCreate, db: Session = Depends(get_db)):
 @router.put("/{supplier_id}", response_model=SupplierResponse)
 def update_supplier(supplier_id: int, data: SupplierUpdate, db: Session = Depends(get_db)):
     """更新供应商"""
-    supplier = supplier_service.update(db, supplier_id, data.model_dump(exclude_unset=True))
+    supplier_data = data.model_dump(exclude_unset=True)
+    # 同步 category 到 service_type（数据库使用 service_type）
+    if supplier_data.get('category') and 'service_type' not in supplier_data:
+        supplier_data['service_type'] = supplier_data['category']
+    supplier = supplier_service.update(db, supplier_id, supplier_data)
     if not supplier:
         raise SupplierException.not_found(supplier_id)
     return supplier
@@ -93,7 +121,7 @@ def create_supplier_review(data: SupplierReviewCreate, db: Session = Depends(get
 @router.post("/{supplier_id}/reviews", response_model=SupplierReviewResponse)
 def create_supplier_review_simple(
     supplier_id: int,
-    data: dict,  # {content, rating}
+    data: dict,  # {reviewer_name, content, rating}
     db: Session = Depends(get_db)
 ):
     """简化创建供应商评价（前端调用）"""
@@ -107,6 +135,7 @@ def create_supplier_review_simple(
         'price_score': rating,
         'overall_score': rating,
         'comments': data.get('content', ''),
+        'reviewer_name': data.get('reviewer_name') or data.get('name') or data.get('user') or '匿名',
     }
     return review_service.create(db, review_data)
 
@@ -140,12 +169,13 @@ def create_bill(data: BillCreate, db: Session = Depends(get_db)):
 @router.post("/{supplier_id}/bills", response_model=BillResponse)
 def create_bill_simple(
     supplier_id: int,
-    data: dict,  # {activityName, projectName, amount, status, date}
+    data: dict,  # {activityName/projectName 或 activity_name/project_name, amount, status, date}
     db: Session = Depends(get_db)
 ):
     """简化创建账单（前端调用）"""
     # 尝试通过活动名称查找 activity_id
-    activity_name = data.get('activityName', '')
+    activity_name = data.get('activityName') or data.get('activity_name') or ''
+    project_name = data.get('projectName') or data.get('project_name') or ''
     activity_id = None
     if activity_name:
         activity = db.query(Activity).filter(Activity.name == activity_name).first()
@@ -155,10 +185,12 @@ def create_bill_simple(
     bill_data = {
         'supplier_id': supplier_id,
         'activity_id': activity_id,
+        'activity_name': activity_name,
+        'project_name': project_name,
         'amount': data.get('amount', 0),
-        'status': data.get('status', '待付款'),
+        'status': data.get('status', '待结算'),
         'due_date': data.get('date'),
-        'notes': data.get('projectName', ''),
+        'notes': project_name,
     }
     return bill_service.create(db, bill_data)
 
@@ -171,12 +203,3 @@ def mark_bill_paid(bill_id: int, db: Session = Depends(get_db)):
         raise NotFoundException("账单", bill_id)
     return bill
 
-
-@router.get("/bills/pending", response_model=List[BillResponse])
-def list_pending_bills(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=100),
-    db: Session = Depends(get_db)
-):
-    """获取待付款账单"""
-    return bill_service.get_pending(db, skip, limit)

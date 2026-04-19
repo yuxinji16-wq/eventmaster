@@ -34,6 +34,7 @@ export interface ApiMaterial {
   status: string;
   usage_count: number;
   last_updated: string;
+  image_url?: string;
   created_at: string;
 }
 
@@ -80,12 +81,36 @@ export interface ApiSupplierDetail extends ApiSupplier {
 export interface ApiOpportunity {
   id: number;
   client_name: string;
-  activity_id: number;
-  value: number;
-  stage: string;
-  probability: number;
+  company?: string;
+  contact?: string;
+  phone?: string;
+  email?: string;
+  requirement?: string;
+  contact_person?: string;
+  estimated_value: number;
+  status: string;
+  create_date?: string;
+  expected_close_date?: string;
+  activity_id?: number;
+  notes?: string;
+  field?: string;
+  position?: string;
   created_at: string;
   updated_at: string;
+  // 来源信息
+  source_type?: string;  // activity=活动获取, manual=自主录入
+  source_name?: string;  // 活动名称或"自主录入"
+  // 销售分配
+  region?: string;  // 所属区域
+  owner?: string;  // 对接人
+  lead_level?: string;
+  evaluation_note?: string;
+  transferred_to_sales?: string;
+  transferred_at?: string;
+  converted?: string;
+  conversion_status?: string;
+  conversion_at?: string;
+  result_note?: string;
 }
 
 export interface ApiBudgetLog {
@@ -93,6 +118,7 @@ export interface ApiBudgetLog {
   activity_id: number;
   name: string;
   amount: number;
+  planned_amount?: number;
   category: string;
   date: string;
   notes?: string;
@@ -121,6 +147,10 @@ export interface ApiWithdrawalLog {
   user: string;
   reason: string;
   date: string;
+  activity_id?: number;
+  status?: string;
+  returned_at?: string;
+  return_count?: number;
   created_at: string;
 }
 
@@ -158,7 +188,7 @@ export interface ApiBudgetOverview {
 
 // ============ API Client ============
 
-const API_BASE = 'http://localhost:8001/api';
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8002/api').replace(/\/$/, '');
 const DEFAULT_TIMEOUT = 30000; // 30秒超时
 const MAX_RETRIES = 3;
 
@@ -171,6 +201,26 @@ interface ApiError {
 
 function createApiError(message: string, status?: number, isNetworkError = false, isTimeout = false): ApiError {
   return { message, status, isNetworkError, isTimeout };
+}
+
+type QueryValue = string | number | boolean | null | undefined;
+
+function buildQuery(
+  params?: Record<string, QueryValue>,
+  aliases: Record<string, string> = {}
+): string {
+  const query = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return;
+    query.set(aliases[key] || key, String(value));
+  });
+
+  return query.toString();
+}
+
+function withQuery(endpoint: string, query: string): string {
+  return query ? `${endpoint}?${query}` : endpoint;
 }
 
 export async function request<T>(endpoint: string, options: RequestInit = {}, retries = MAX_RETRIES): Promise<T> {
@@ -200,11 +250,28 @@ export async function request<T>(endpoint: string, options: RequestInit = {}, re
       const response = await fetch(url, config);
 
       if (!response.ok) {
-        // 401  Unauthorized - 清除 token 并重定向到登录页
+        // 401 Unauthorized - 清除 token 并重定向到登录页
+        // 但如果是登录请求失败（无 token 时收到 401），不重定向，让调用方处理错误
         if (response.status === 401) {
-          localStorage.removeItem('auth_token');
-          window.location.href = '/login';
-          throw createApiError('登录已过期，请重新登录', 401);
+          const existingToken = localStorage.getItem('auth_token');
+          if (existingToken) {
+            // 有 token 但 401，说明是会话过期
+            localStorage.removeItem('auth_token');
+            // 只有不在登录页面时才重定向
+            if (!window.location.pathname.includes('/login')) {
+              window.location.href = '/login';
+            }
+            throw createApiError('登录已过期，请重新登录', 401);
+          }
+          // 无 token 时收到 401，说明是登录失败，解析错误消息后抛出
+          let errorMessage = '登录失败';
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData?.detail || errorData?.message || errorMessage;
+          } catch {
+            // 解析失败
+          }
+          throw createApiError(errorMessage, 401);
         }
 
         let errorMessage = `HTTP Error: ${response.status}`;
@@ -275,12 +342,12 @@ export const dashboardApi = {
 
 export const activitiesApi = {
   getList: (params?: { year?: string; category?: string; status?: string; search?: string }) => {
-    const query = new URLSearchParams(params as Record<string, string>).toString();
-    return request<{ activities: ApiActivity[]; total: number }>(`/activities?${query}`);
+    const query = buildQuery(params, { search: 'keyword' });
+    return request<ApiActivity[]>(withQuery('/activities/', query));
   },
   getDetail: (id: number) => request<ApiActivity>(`/activities/${id}`),
   create: (data: Partial<ApiActivity>) =>
-    request<ApiActivity>('/activities', {
+    request<ApiActivity>('/activities/', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
@@ -297,6 +364,56 @@ export const activitiesApi = {
       method: 'POST',
       body: JSON.stringify({}),
     }),
+  getTaskSummary: () =>
+    request<Record<string, { task_count: number; completed_task_count: number }>>('/activities/summary/task-status'),
+};
+
+// ============ 任务 API ============
+
+export interface ApiTask {
+  id: number;
+  activity_id: number;
+  name: string;
+  description?: string;
+  assignee?: string;
+  due_date?: string;
+  priority: string;
+  status: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export const tasksApi = {
+  getByActivity: (activityId: number, params?: { status?: string; priority?: string }) => {
+    const query = buildQuery(params);
+    return request<ApiTask[]>(withQuery(`/tasks/activity/${activityId}`, query));
+  },
+  getDetail: (taskId: number) => request<ApiTask>(`/tasks/${taskId}`),
+  create: (data: Partial<ApiTask>) =>
+    request<ApiTask>('/tasks/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  batchCreate: (tasks: Partial<ApiTask>[]) =>
+    request<ApiTask[]>('/tasks/batch/', {
+      method: 'POST',
+      body: JSON.stringify({ tasks }),
+    }),
+  update: (taskId: number, data: Partial<ApiTask>) =>
+    request<ApiTask>(`/tasks/${taskId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  updateStatus: (taskId: number, status: string) =>
+    request<ApiTask>(`/tasks/${taskId}/status?status=${encodeURIComponent(status)}`, {
+      method: 'PATCH',
+    }),
+  delete: (taskId: number) => request<{ message: string }>(`/tasks/${taskId}`, {
+    method: 'DELETE',
+  }),
+  deleteByActivity: (activityId: number) => request<{ message: string }>(`/tasks/activity/${activityId}`, {
+    method: 'DELETE',
+  }),
 };
 
 // ============ 预算 API ============
@@ -309,12 +426,21 @@ export const budgetApi = {
       body: JSON.stringify({ quota: data.quota }),
     }),
   getActivities: (year: string) =>
-    request<{ activities: ApiActivity[]; total: number }>(`/budget/activities?year=${year}`),
+    request<ApiActivity[] | { activities: ApiActivity[]; total: number }>(`/budget/activities?year=${year}`),
   getLogs: (activityId: number) => request<ApiBudgetLog[]>(`/budget/logs?activity_id=${activityId}`),
   createLog: (data: Partial<ApiBudgetLog>) =>
-    request<ApiBudgetLog>('/budget/logs', {
+    request<ApiBudgetLog>('/budget/logs/', {
       method: 'POST',
       body: JSON.stringify(data),
+    }),
+  updateLog: (logId: number, data: Partial<ApiBudgetLog>) =>
+    request<ApiBudgetLog>(`/budget/logs/${logId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  deleteLog: (logId: number) =>
+    request<{ message: string }>(`/budget/logs/${logId}`, {
+      method: 'DELETE',
     }),
   analyze: (activityId: number) =>
     request<{ efficiency: number; cpl: number; roi: number }>(
@@ -327,12 +453,12 @@ export const budgetApi = {
 
 export const materialsApi = {
   getList: (params?: { search?: string; category?: string }) => {
-    const query = new URLSearchParams(params as Record<string, string>).toString();
-    return request<{ materials: ApiMaterial[]; total: number }>(`/materials?${query}`);
+    const query = buildQuery(params, { search: 'keyword' });
+    return request<ApiMaterial[]>(withQuery('/materials/', query));
   },
   getDetail: (id: number) => request<ApiMaterial>(`/materials/${id}`),
   create: (data: Partial<ApiMaterial>) =>
-    request<ApiMaterial>('/materials', {
+    request<ApiMaterial>('/materials/', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
@@ -354,26 +480,35 @@ export const materialsApi = {
     }),
   withdraw: (
     id: number,
-    data: { count: number; user: string; reason: string }
+    data: { count: number; user: string; reason: string; activity_id?: number }
   ) =>
     request<{ message: string }>(`/materials/${id}/withdrawal`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  getWarehousingLogs: () => request<ApiWarehousingLog[]>('/materials/warehousing-logs'),
-  getWithdrawalLogs: () => request<ApiWithdrawalLog[]>('/materials/withdrawal-logs'),
+  getWarehousingLogs: (materialId?: number) =>
+    request<ApiWarehousingLog[]>(materialId ? `/materials/${materialId}/warehousing` : '/materials/warehousing-logs'),
+  getWithdrawalLogs: (params?: { materialId?: number; activityId?: number }) => {
+    if (params?.materialId) return request<ApiWithdrawalLog[]>(`/materials/${params.materialId}/withdrawal`);
+    const query = buildQuery(params?.activityId ? { activity_id: params.activityId } : undefined);
+    return request<ApiWithdrawalLog[]>(withQuery('/materials/withdrawal-logs', query));
+  },
+  returnWithdrawal: (logId: number, returnCount?: number) =>
+    request<ApiWithdrawalLog>(`/materials/withdrawal/${logId}/return${returnCount ? `?return_count=${returnCount}` : ''}`, {
+      method: 'PATCH',
+    }),
 };
 
 // ============ 供应商 API ============
 
 export const suppliersApi = {
   getList: (params?: { category?: string; search?: string }) => {
-    const query = new URLSearchParams(params as Record<string, string>).toString();
-    return request<{ suppliers: ApiSupplier[]; total: number }>(`/suppliers?${query}`);
+    const query = buildQuery(params, { search: 'keyword' });
+    return request<ApiSupplier[]>(withQuery('/suppliers/', query));
   },
   getDetail: (id: number) => request<ApiSupplierDetail>(`/suppliers/${id}`),
   create: (data: Partial<ApiSupplier>) =>
-    request<ApiSupplier>('/suppliers', {
+    request<ApiSupplier>('/suppliers/', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
@@ -389,7 +524,7 @@ export const suppliersApi = {
     request<any[]>(`/suppliers/${id}/reviews`),
   getBills: (id: number) =>
     request<any[]>(`/suppliers/${id}/bills`),
-  addReview: (id: number, data: { content: string; rating: number }) =>
+  addReview: (id: number, data: { reviewer_name?: string; content: string; rating: number }) =>
     request<{ message: string }>(`/suppliers/${id}/reviews`, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -414,20 +549,18 @@ export const suppliersApi = {
 
 export const opportunitiesApi = {
   getList: (params?: { stage?: string; activity_id?: number; search?: string }) => {
-    const query = new URLSearchParams(
-      params as Record<string, string | number>
-    ).toString();
-    return request<{ opportunities: ApiOpportunity[]; total: number }>(
-      `/opportunities?${query}`
+    const query = buildQuery(params, { stage: 'status', search: 'keyword' });
+    return request<ApiOpportunity[]>(
+      withQuery('/opportunities/', query)
     );
   },
   getPipeline: () =>
     request<{
       total_value: number;
       stages: Array<{ stage: string; value: number; count: number }>;
-    }>('/opportunities/pipeline'),
+    }>('/opportunities/pipeline/'),
   create: (data: Partial<ApiOpportunity>) =>
-    request<ApiOpportunity>('/opportunities', {
+    request<ApiOpportunity>('/opportunities/', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
@@ -439,6 +572,7 @@ export const opportunitiesApi = {
   delete: (id: number) => request<{ message: string }>(`/opportunities/${id}`, {
     method: 'DELETE',
   }),
+  getLogs: (id: number) => request<any[]>(`/opportunities/${id}/logs`),
 };
 
 // ============ 复盘 API 类型 ============
@@ -524,8 +658,11 @@ export const reviewsApi = {
     const query = status ? `?status=${status}` : '';
     return request<any[]>(`/reviews/activities${query}`);
   },
-  // 获取单个复盘
-  getReview: (reviewId: number) =>
+  // 获取单个复盘（按活动ID）
+  getReview: (activityId: number) =>
+    request<any[]>(`/reviews/?activity_id=${activityId}`),
+  // 获取复盘详情（按复盘ID）
+  getReviewDetail: (reviewId: number) =>
     request<ApiReview>(`/reviews/${reviewId}`),
   // 创建复盘
   createReview: (data: { activity_id: number; status?: string; expected_participants?: number }) =>
@@ -588,7 +725,7 @@ export const reviewsApi = {
     manager_id?: string;
     manager_name?: string;
   }) =>
-    request<ApiReviewConclusion>('/reviews/conclusions', {
+    request<ApiReviewConclusion>('/reviews/conclusions/', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
@@ -612,6 +749,7 @@ export const reviewsApi = {
 export default {
   dashboard: dashboardApi,
   activities: activitiesApi,
+  tasks: tasksApi,
   budget: budgetApi,
   materials: materialsApi,
   suppliers: suppliersApi,

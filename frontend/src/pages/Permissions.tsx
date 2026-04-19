@@ -112,6 +112,40 @@ const Permissions: React.FC = () => {
     }));
   };
 
+  // 按列全选/取消：切换某一操作权限在所有模块上的状态
+  const toggleColumnPermission = (action: string) => {
+    const currentColumnValues = MODULES.map(m => formData.permissions[m.id]?.[action] ?? false);
+    const allChecked = currentColumnValues.every(v => v);
+    const newValue = !allChecked;
+    setFormData(prev => {
+      const updatedPermissions = { ...prev.permissions };
+      MODULES.forEach(m => {
+        updatedPermissions[m.id] = {
+          ...updatedPermissions[m.id],
+          [action]: newValue,
+        };
+      });
+      return { ...prev, permissions: updatedPermissions };
+    });
+  };
+
+  // 判断某列是否已全部勾选
+  const isColumnAllChecked = (action: string) => {
+    return MODULES.every(m => formData.permissions[m.id]?.[action] === true);
+  };
+
+  // 判断某列是否已全部取消
+  const isColumnAllUnchecked = (action: string) => {
+    return MODULES.every(m => formData.permissions[m.id]?.[action] === false);
+  };
+
+  // 获取列复选框状态：'all' | 'none' | 'indeterminate'
+  const getColumnState = (action: string): 'all' | 'none' | 'indeterminate' => {
+    if (isColumnAllChecked(action)) return 'all';
+    if (isColumnAllUnchecked(action)) return 'none';
+    return 'indeterminate';
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -325,8 +359,29 @@ const Permissions: React.FC = () => {
                         <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase w-32">模块</th>
                         {ACTIONS.map(action => (
                           <th key={action.id} className="px-4 py-3 text-center text-xs font-black text-slate-400 uppercase">
-                            {action.name}
+                            <button
+                              type="button"
+                              onClick={() => toggleColumnPermission(action.id)}
+                              title={`按列全选 ${action.name}`}
+                              className={`w-7 h-7 rounded-lg flex items-center justify-center mx-auto transition-all ${
+                                getColumnState(action.id) === 'all'
+                                  ? 'bg-indigo-600 text-white'
+                                  : getColumnState(action.id) === 'indeterminate'
+                                  ? 'bg-indigo-300 text-white'
+                                  : 'bg-slate-200 text-slate-400 hover:bg-slate-300'
+                              }`}
+                            >
+                              {getColumnState(action.id) === 'all' ? '✓' : getColumnState(action.id) === 'indeterminate' ? '⚟' : '✗'}
+                            </button>
                           </th>
+                        ))}
+                      </tr>
+                      <tr className="bg-slate-100 border-t border-slate-200">
+                        <td className="px-4 py-2"></td>
+                        {ACTIONS.map(action => (
+                          <td key={action.id} className="px-4 py-2 text-center text-xs font-bold text-slate-500">
+                            {action.name}
+                          </td>
                         ))}
                       </tr>
                     </thead>

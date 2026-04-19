@@ -303,7 +303,7 @@ npm run preview   # 预览构建结果
 # 后端
 cd backend
 pip install -r requirements.txt
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 ```
 
 ---
@@ -487,4 +487,3 @@ backend/app/
 ### 10.4 敏感信息加密
 - SMTP 密码使用 Fernet 对称加密
 - 密钥存储在环境变量中
-

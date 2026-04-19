@@ -9,13 +9,13 @@ from pydantic import BaseModel, ConfigDict
 class MaterialBase(BaseModel):
     name: str
     category: Optional[str] = None
-    unit: Optional[str] = None
+    type: Optional[str] = None
     stock: Optional[float] = 0
-    min_stock: Optional[float] = 0
-    location: Optional[str] = None
-    supplier_id: Optional[int] = None
-    price: Optional[float] = 0
-    description: Optional[str] = None
+    unit: Optional[str] = None
+    status: Optional[str] = None
+    usage_count: Optional[int] = 0
+    last_updated: Optional[str] = None
+    image_url: Optional[str] = None
 
 
 class MaterialCreate(MaterialBase):
@@ -25,13 +25,13 @@ class MaterialCreate(MaterialBase):
 class MaterialUpdate(BaseModel):
     name: Optional[str] = None
     category: Optional[str] = None
-    unit: Optional[str] = None
+    type: Optional[str] = None
     stock: Optional[float] = None
-    min_stock: Optional[float] = None
-    location: Optional[str] = None
-    supplier_id: Optional[int] = None
-    price: Optional[float] = None
-    description: Optional[str] = None
+    unit: Optional[str] = None
+    status: Optional[str] = None
+    usage_count: Optional[int] = None
+    last_updated: Optional[str] = None
+    image_url: Optional[str] = None
 
 
 class MaterialResponse(MaterialBase):
@@ -70,6 +70,10 @@ class WithdrawalLogBase(BaseModel):
     user: Optional[str] = None
     reason: Optional[str] = None
     date: Optional[str] = None
+    activity_id: Optional[int] = None
+    status: Optional[str] = "领用中"
+    returned_at: Optional[str] = None
+    return_count: Optional[float] = 0
 
 
 class WithdrawalLogCreate(WithdrawalLogBase):

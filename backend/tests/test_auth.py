@@ -5,6 +5,9 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+# 测试用户密码 - 符合密码强度要求
+TEST_PASSWORD_STRONG = "Admin123"  # 大写+小写+数字，8位以上
+
 
 @pytest.fixture
 def admin_user(client: TestClient, db_session: Session):
@@ -13,7 +16,7 @@ def admin_user(client: TestClient, db_session: Session):
     response = client.post("/api/auth/register", json={
         "username": "testadmin",
         "email": "testadmin@example.com",
-        "password": "admin123"
+        "password": TEST_PASSWORD_STRONG
     })
     assert response.status_code == 200
 
@@ -26,7 +29,7 @@ def admin_user(client: TestClient, db_session: Session):
     # 登录获取 token
     login_response = client.post("/api/auth/login", json={
         "username": "testadmin",
-        "password": "admin123"
+        "password": TEST_PASSWORD_STRONG
     })
     assert login_response.status_code == 200
     return login_response.json()["access_token"]
@@ -38,13 +41,13 @@ def normal_user(client: TestClient):
     response = client.post("/api/auth/register", json={
         "username": "testuser",
         "email": "testuser@example.com",
-        "password": "user123"
+        "password": "User1234"
     })
     assert response.status_code == 200
 
     login_response = client.post("/api/auth/login", json={
         "username": "testuser",
-        "password": "user123"
+        "password": "User1234"
     })
     assert login_response.status_code == 200
     return login_response.json()["access_token"]
@@ -58,7 +61,7 @@ class TestAuthAPI:
         response = client.post("/api/auth/register", json={
             "username": "newuser",
             "email": "newuser@example.com",
-            "password": "pass123456"
+            "password": "Pass12345"
         })
         assert response.status_code == 200
         data = response.json()
@@ -73,13 +76,13 @@ class TestAuthAPI:
         client.post("/api/auth/register", json={
             "username": "duplicateuser",
             "email": "dup1@example.com",
-            "password": "pass123"
+            "password": "Pass12345"
         })
         # 再次注册相同用户名
         response = client.post("/api/auth/register", json={
             "username": "duplicateuser",
             "email": "dup2@example.com",
-            "password": "pass123"
+            "password": "Pass12345"
         })
         assert response.status_code == 400
         assert "用户名已存在" in response.json()["detail"]
@@ -89,12 +92,12 @@ class TestAuthAPI:
         client.post("/api/auth/register", json={
             "username": "emailuser1",
             "email": "sameemail@example.com",
-            "password": "pass123"
+            "password": "Pass12345"
         })
         response = client.post("/api/auth/register", json={
             "username": "emailuser2",
             "email": "sameemail@example.com",
-            "password": "pass123"
+            "password": "Pass12345"
         })
         assert response.status_code == 400
         assert "邮箱已被注册" in response.json()["detail"]
@@ -105,12 +108,12 @@ class TestAuthAPI:
         client.post("/api/auth/register", json={
             "username": "loginuser",
             "email": "login@example.com",
-            "password": "test123456"
+            "password": "Test12345"
         })
         # 登录
         response = client.post("/api/auth/login", json={
             "username": "loginuser",
-            "password": "test123456"
+            "password": "Test12345"
         })
         assert response.status_code == 200
         data = response.json()
@@ -123,7 +126,7 @@ class TestAuthAPI:
         client.post("/api/auth/register", json={
             "username": "wrongpwduser",
             "email": "wrongpwd@example.com",
-            "password": "correct123"
+            "password": "Correct123"
         })
         response = client.post("/api/auth/login", json={
             "username": "wrongpwduser",
@@ -163,14 +166,14 @@ class TestAuthAPI:
         register_response = client.post("/api/auth/register", json={
             "username": "flowuser",
             "email": "flow@example.com",
-            "password": "flow123456"
+            "password": "Flow12345"
         })
         assert register_response.status_code == 200
 
         # 登录
         login_response = client.post("/api/auth/login", json={
             "username": "flowuser",
-            "password": "flow123456"
+            "password": "Flow12345"
         })
         assert login_response.status_code == 200
         token = login_response.json()["access_token"]
@@ -182,3 +185,29 @@ class TestAuthAPI:
         )
         assert me_response.status_code == 200
         assert me_response.json()["username"] == "flowuser"
+
+    def test_register_weak_password(self, client: TestClient):
+        """测试弱密码被拒绝"""
+        # 密码太短
+        response = client.post("/api/auth/register", json={
+            "username": "weakuser1",
+            "email": "weak1@example.com",
+            "password": "Admin1"  # 不足8位
+        })
+        assert response.status_code == 422
+
+        # 缺少大写字母
+        response = client.post("/api/auth/register", json={
+            "username": "weakuser2",
+            "email": "weak2@example.com",
+            "password": "admin12345"  # 没有大写
+        })
+        assert response.status_code == 422
+
+        # 缺少数字
+        response = client.post("/api/auth/register", json={
+            "username": "weakuser3",
+            "email": "weak3@example.com",
+            "password": "Adminadmin"  # 没有数字
+        })
+        assert response.status_code == 422

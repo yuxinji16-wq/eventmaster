@@ -68,6 +68,7 @@ class BudgetLogBase(BaseModel):
     activity_id: Optional[int] = None
     name: str
     amount: float
+    planned_amount: Optional[float] = 0
     category: Optional[str] = None
     date: Optional[date] = None
     notes: Optional[str] = None
@@ -82,6 +83,7 @@ class BudgetLogCreate(BudgetLogBase):
 class BudgetLogUpdate(BaseModel):
     name: Optional[str] = None
     amount: Optional[float] = None
+    planned_amount: Optional[float] = None
     category: Optional[str] = None
     date: Optional[date] = None
     notes: Optional[str] = None

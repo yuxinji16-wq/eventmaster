@@ -131,6 +131,7 @@ export interface Material {
   status: string;
   usageCount: number;
   lastUpdated: string;
+  imageUrl?: string;
   created_at?: string;
 }
 
@@ -176,21 +177,55 @@ export interface SupplierDetail extends Supplier {
   bills: BillRecord[];
 }
 
+// 商机来源类型
+export type LeadSourceType = 'activity' | 'manual';
+
+// 线索等级
+export type LeadLevel = 'A' | 'B' | 'C' | '待评估';
+
+// 线索状态
+export type LeadStatus = '未跟进' | '待跟进' | '已联系' | '已转销售' | '已转化' | '未转化';
+
+// 商机线索类型（统一数据结构）
 export interface Opportunity {
   id: string;
-  clientName: string;
+  // 客户信息
+  clientName: string;       // 客户单位
   company?: string;
   contact?: string;
-  phone?: string;
-  email?: string;
-  requirement?: string;
-  contactPerson?: string;
-  activityId?: string;
-  estimatedValue: number;
-  status: string;
-  createDate?: string;
-  expectedCloseDate?: string;
-  notes?: string;
+  contactName: string;      // 姓名
+  phone: string;            // 联系方式
+  email?: string;           // 邮箱
+  requirement: string;       // 需求描述
+
+  // 来源信息
+  sourceType: LeadSourceType;  // 来源类型：activity=活动获取, manual=自主录入
+  sourceName: string;          // 来源名称：活动名称或"自主录入"
+  activityId?: string;         // 关联活动ID（仅活动来源时有值）
+
+  // 销售分配
+  region: string;             // 所属区域（必填）
+  owner: string;             // 对接人（必填）
+
+  // 销售评估
+  leadLevel: LeadLevel;      // 线索等级（A/B/C/待评估）
+  evaluationNote?: string;    // 评估备注
+  transferredToSales: boolean; // 是否转交销售
+  transferredAt?: string;     // 转交时间
+
+  // 转化结果
+  converted: boolean;         // 是否转化成功
+  conversionStatus?: LeadStatus; // 结果状态
+  conversionAt?: string;      // 转化时间
+  resultNote?: string;        // 结果备注
+
+  // 线索状态
+  status: LeadStatus;        // 当前状态
+
+  // 元数据
+  createdAt: string;          // 创建时间
+  updatedAt?: string;         // 更新时间
+  notes?: string;             // 备注
 }
 
 export interface BudgetLog {

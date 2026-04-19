@@ -10,12 +10,19 @@ class Supplier(Base, TimestampMixin):
     __tablename__ = "suppliers"
 
     name = Column(String(200), nullable=False, index=True)
-    category = Column(String(50))  # 搭建, 设计, 影音, 礼品, 印刷, 其他
+    service_type = Column(String(50))  # 搭建, 设计, 影音, 礼品, 印刷, 其他
+    # category 是 service_type 的别名，用于 API 兼容
+    category = Column(String(50))  # 备用字段
+    rating = Column(Float)  # 评分
     contact = Column(String(100))
     phone = Column(String(50))
     email = Column(String(100))
     address = Column(String(500))
-    description = Column(Text)
+    bank_name = Column(String(200))
+    bank_account = Column(String(100))
+    last_used = Column(String(20))
+    order_count = Column(Integer, default=0)
+    tags = Column(String(500))  # JSON 字符串
 
 
 class SupplierReview(Base, TimestampMixin):
@@ -29,6 +36,7 @@ class SupplierReview(Base, TimestampMixin):
     price_score = Column(Float)  # 价格评分
     overall_score = Column(Float)  # 综合评分
     comments = Column(Text)
+    reviewer_name = Column(String(100))
 
 
 class Bill(Base, TimestampMixin):
@@ -37,8 +45,10 @@ class Bill(Base, TimestampMixin):
 
     supplier_id = Column(Integer, ForeignKey("suppliers.id"))
     activity_id = Column(Integer, ForeignKey("activities.id"))
+    activity_name = Column(String(200))
+    project_name = Column(String(200))
     amount = Column(Float)
-    status = Column(String(20))  # 待付款, 已付款, 已结算
+    status = Column(String(20))  # 待结算, 已结清
     due_date = Column(String(20))
     paid_at = Column(String(20))
     notes = Column(Text)

@@ -4,6 +4,9 @@ Schema 导出
 from app.schemas.activity import (
     ActivityBase, ActivityCreate, ActivityUpdate, ActivityResponse
 )
+from app.schemas.task import (
+    TaskBase, TaskCreate, TaskUpdate, TaskResponse, TaskBatchCreate
+)
 from app.schemas.material import (
     MaterialBase, MaterialCreate, MaterialUpdate, MaterialResponse,
     WarehousingLogBase, WarehousingLogCreate, WarehousingLogResponse,
@@ -41,6 +44,8 @@ from app.schemas.settings import (
 __all__ = [
     # Activity
     "ActivityBase", "ActivityCreate", "ActivityUpdate", "ActivityResponse",
+    # Task
+    "TaskBase", "TaskCreate", "TaskUpdate", "TaskResponse", "TaskBatchCreate",
     # Material
     "MaterialBase", "MaterialCreate", "MaterialUpdate", "MaterialResponse",
     "WarehousingLogBase", "WarehousingLogCreate", "WarehousingLogResponse",

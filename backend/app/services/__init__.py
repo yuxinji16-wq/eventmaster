@@ -2,6 +2,7 @@
 Service 导出
 """
 from app.services.activity import ActivityService
+from app.services.task import TaskService
 from app.services.material import MaterialService, WarehousingLogService, WithdrawalLogService
 from app.services.supplier import SupplierService, SupplierReviewService, BillService
 from app.services.budget import BudgetService, BudgetItemService, BudgetLogService, YearlyQuotaService
@@ -11,6 +12,7 @@ from app.services.user import UserService, RoleService
 
 __all__ = [
     "ActivityService",
+    "TaskService",
     "MaterialService",
     "WarehousingLogService",
     "WithdrawalLogService",

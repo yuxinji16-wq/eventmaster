@@ -17,7 +17,7 @@ const BudgetManager: React.FC = () => {
   // API Hooks
   const toast = useToast();
   const { activities, loading: activitiesLoading, updateActivity } = useActivitiesData();
-  const { overview, activitiesWithBudget, loading: budgetLoading, updateQuota, getLogs, createLog, fetchBudgetOverview } = useBudgetData();
+  const { overview, activitiesWithBudget, loading: budgetLoading, updateQuota, getLogs, createLog, updateLog, deleteLog, fetchBudgetOverview, fetchActivitiesWithBudget } = useBudgetData();
 
   // 数据状态化
   const [logs, setLogs] = useState<BudgetLog[]>([]);
@@ -34,6 +34,7 @@ const BudgetManager: React.FC = () => {
   const [viewMode, setViewMode] = useState<'overview' | 'detail'>('overview');
   const [currentActivityId, setCurrentActivityId] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState('所有类型');
+  const [industryFilter, setIndustryFilter] = useState('所有行业');
   const [statusFilter, setStatusFilter] = useState('全部状态');
 
   // 弹窗状态
@@ -55,7 +56,8 @@ const BudgetManager: React.FC = () => {
   // 从API获取数据
   useEffect(() => {
     fetchBudgetOverview(selectedYear);
-  }, [selectedYear, fetchBudgetOverview]);
+    fetchActivitiesWithBudget(selectedYear);
+  }, [selectedYear, fetchBudgetOverview, fetchActivitiesWithBudget]);
 
   // 当切换活动时获取对应的费用明细
   useEffect(() => {
@@ -138,20 +140,24 @@ const BudgetManager: React.FC = () => {
     };
   }, [yearFilteredActivities]);
 
-  // 月度趋势数据
-  const monthlyTrend = useMemo(() => {
-    const months = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
-    return months.map((month, index) => {
-      const monthNum = (index + 1).toString().padStart(2, '0');
-      const monthActivities = yearFilteredActivities.filter(a => {
-        const activityMonth = a.date.split('-')[1];
-        return activityMonth === monthNum;
-      });
-      const budget = monthActivities.reduce((sum, a) => sum + a.budget, 0);
-      const actual = monthActivities.reduce((sum, a) => sum + a.actualSpend, 0);
-      return { month, budget: budget / 10000, actual: actual / 10000 };
-    });
+  const availableIndustries = useMemo(() => {
+    const industries = Array.from(new Set(
+      yearFilteredActivities
+        .map(a => a.industry || '未设置行业')
+        .filter(Boolean)
+    ));
+    return industries.sort();
   }, [yearFilteredActivities]);
+
+  // 行业预算分布
+  const monthlyTrend = useMemo(() => {
+    return availableIndustries.map(industry => {
+      const industryActivities = yearFilteredActivities.filter(a => (a.industry || '未设置行业') === industry);
+      const budget = industryActivities.reduce((sum, a) => sum + a.budget, 0);
+      const actual = industryActivities.reduce((sum, a) => sum + a.actualSpend, 0);
+      return { month: industry, budget: budget / 10000, actual: actual / 10000 };
+    });
+  }, [availableIndustries, yearFilteredActivities]);
 
   // 超预算活动
   const overBudgetActivities = useMemo(() => {
@@ -196,13 +202,15 @@ const BudgetManager: React.FC = () => {
   // 筛选后的活动列表
   const filteredActivities = useMemo(() => {
     return yearFilteredActivities.filter(a => {
-      const matchesSearch = a.name.toLowerCase().includes(searchQuery.toLowerCase());
+      const name = a.name || '';
+      const matchesSearch = name.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCategory = categoryFilter === '所有类型' || a.category === categoryFilter;
+      const matchesIndustry = industryFilter === '所有行业' || (a.industry || '未设置行业') === industryFilter;
       const status = getBudgetStatus(a);
       const matchesStatus = statusFilter === '全部状态' || status === statusFilter;
-      return matchesSearch && matchesCategory && matchesStatus;
+      return matchesSearch && matchesCategory && matchesIndustry && matchesStatus;
     });
-  }, [yearFilteredActivities, searchQuery, categoryFilter, statusFilter]);
+  }, [yearFilteredActivities, searchQuery, categoryFilter, industryFilter, statusFilter]);
 
   // 活动详情费用明细
   const detailLogs = useMemo(() =>
@@ -228,7 +236,9 @@ const BudgetManager: React.FC = () => {
     };
 
     try {
-      const newLog = await createLog(logData);
+      const newLog = editingLog
+        ? await updateLog(editingLog.id, logData)
+        : await createLog(logData);
       const updatedLogs = editingLog
         ? logs.map(l => l.id === editingLog.id ? newLog : l)
         : [...logs, newLog];
@@ -243,6 +253,8 @@ const BudgetManager: React.FC = () => {
         // 调用API更新活动实际支出
         await updateActivity(parseInt(currentActivityId), { actualSpend: newActualSpend });
       }
+      await fetchBudgetOverview(selectedYear);
+      await fetchActivitiesWithBudget(selectedYear);
 
       setIsExpenseModalOpen(false);
       setEditingLog(null);
@@ -258,12 +270,15 @@ const BudgetManager: React.FC = () => {
 
     try {
       const updatedLogs = logs.filter(l => l.id !== id);
+      await deleteLog(id);
       setLogs(updatedLogs);
 
       if (currentActivity && currentActivityId) {
         const newActualSpend = currentActivity.actualSpend - logToDelete.amount;
         await updateActivity(parseInt(currentActivityId), { actualSpend: Math.max(0, newActualSpend) });
       }
+      await fetchBudgetOverview(selectedYear);
+      await fetchActivitiesWithBudget(selectedYear);
     } catch (err) {
       console.error('删除费用记录失败:', err);
       toast.error('删除失败', '删除费用记录失败，请重试');
@@ -379,6 +394,9 @@ const BudgetManager: React.FC = () => {
           setSearchQuery={setSearchQuery}
           categoryFilter={categoryFilter}
           setCategoryFilter={setCategoryFilter}
+          industryFilter={industryFilter}
+          setIndustryFilter={setIndustryFilter}
+          availableIndustries={availableIndustries}
           statusFilter={statusFilter}
           setStatusFilter={setStatusFilter}
           onYearChange={setSelectedYear}

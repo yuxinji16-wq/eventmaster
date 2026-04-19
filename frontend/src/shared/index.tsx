@@ -444,3 +444,4 @@ export type { Toast, ToastType } from './Toast';
 // ErrorBoundary 导出
 // ============================================
 export { ErrorBoundary } from './ErrorBoundary';
+export { AsyncState } from './AsyncState';

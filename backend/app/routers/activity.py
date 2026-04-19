@@ -22,6 +22,27 @@ def get_activities_summary(db: Session = Depends(get_db)):
     return service.get_activities_summary(db)
 
 
+@router.get("/summary/task-status")
+def get_activities_task_summary(db: Session = Depends(get_db)):
+    """获取活动任务摘要，用于活动卡片同步执行进度"""
+    from app.models.task import Task
+    from sqlalchemy import case, func
+
+    rows = db.query(
+        Task.activity_id,
+        func.count(Task.id).label("task_count"),
+        func.sum(case((Task.status == "已完成", 1), else_=0)).label("completed_task_count"),
+    ).group_by(Task.activity_id).all()
+
+    return {
+        str(row.activity_id): {
+            "task_count": row.task_count or 0,
+            "completed_task_count": row.completed_task_count or 0,
+        }
+        for row in rows
+    }
+
+
 # AI生成活动洞察
 @router.post("/{activity_id}/generate-insight")
 def generate_activity_insight(activity_id: int, db: Session = Depends(get_db)):

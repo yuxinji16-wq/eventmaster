@@ -84,7 +84,11 @@ const ReviewCenter: React.FC = () => {
       </div>
 
       {/* 年度仪表盘 */}
-      <YearlyDashboard yearFilter={yearFilter} />
+      <YearlyDashboard
+        yearFilter={yearFilter}
+        reviewActivities={reviewActivities}
+        activities={activities}
+      />
 
       {/* 复盘列表 */}
       <ReviewList
@@ -95,6 +99,8 @@ const ReviewCenter: React.FC = () => {
         yearFilter={yearFilter}
         categoryFilter={categoryFilter}
         setCategoryFilter={setCategoryFilter}
+        reviewActivities={reviewActivities}
+        activities={activities}
       />
     </div>
   );

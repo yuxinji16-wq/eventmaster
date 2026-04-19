@@ -36,6 +36,7 @@ class BudgetLog(Base, TimestampMixin):
     activity_id = Column(Integer, ForeignKey("activities.id"))
     name = Column(String(200))
     amount = Column(Float)
+    planned_amount = Column(Float, default=0)
     category = Column(String(50))
     date = Column(Date)
     notes = Column(Text)

@@ -1,9 +1,11 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMaterialsData } from '../../utils/hooks';
 import { Material } from '../../types';
 import { useToast } from '../../shared/Toast';
+import { AsyncState } from '../../shared/AsyncState';
+import { materialsApi } from '../../services/backendApi';
 import { 
   Package, AlertCircle, CheckCircle2, XCircle, Search, Filter, History, Clock, 
   Tag, ChevronDown, Plus, X, Check, Layers, Boxes, FileText, Database, 
@@ -30,12 +32,13 @@ interface WithdrawalLog {
   user: string;
   reason: string;
   date: string;
+  status?: string;
 }
 
 const MaterialManager: React.FC = () => {
   const navigate = useNavigate();
   const toast = useToast();
-  const { materials, loading, addMaterial, updateMaterial, deleteMaterial, addStock, withdraw } = useMaterialsData();
+  const { materials, loading, error, fetchMaterials, addMaterial, updateMaterial, deleteMaterial, addStock, withdraw } = useMaterialsData();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('所有分类');
   const [displayMode, setDisplayMode] = useState<'stock' | 'usage'>('stock');
@@ -43,13 +46,9 @@ const MaterialManager: React.FC = () => {
 
   // 核心记录状态
   const [warehousingLogs, setWarehousingLogs] = useState<WarehousingLog[]>([
-    { id: 'l1', materialName: 'AI产品白皮书 2024版', count: 200, operator: '张三', date: '2024-03-22 14:00', isNewType: false },
-    { id: 'l2', materialName: 'NUMAP宣传册', count: 300, operator: '李四', date: '2024-02-05 17:03', isNewType: true },
   ]);
 
   const [withdrawalLogs, setWithdrawalLogs] = useState<WithdrawalLog[]>([
-    { id: 'w1', materialName: 'AI产品白皮书 2024版', count: 50, unit: '本', user: '市场部-张伟', reason: 'Q1巡回展-上海站', date: '2024-03-22 10:30:12' },
-    { id: 'w2', materialName: '品牌定制不锈钢保温杯', count: 20, unit: '个', user: '行政部-李芳', reason: '新员工入职礼包', date: '2024-03-21 15:45:00' },
   ]);
 
   // 交互状态
@@ -64,14 +63,42 @@ const MaterialManager: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>(INITIAL_CATEGORIES[0]);
   const [customCategory, setCustomCategory] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<string[]>(INITIAL_CATEGORIES);
+  const [imagePreview, setImagePreview] = useState('');
 
   // 领用流水搜索
   const [withdrawalSearch, setWithdrawalSearch] = useState('');
 
+  useEffect(() => {
+    materialsApi.getWarehousingLogs()
+      .then(logs => setWarehousingLogs(logs.map((log: any) => ({
+        id: String(log.id),
+        materialName: log.material_name,
+        count: log.count,
+        operator: log.operator || '',
+        date: log.date || log.created_at,
+        isNewType: log.is_new_type === true || log.is_new_type === 'true',
+      }))))
+      .catch(error => console.error('加载入库记录失败:', error));
+
+    materialsApi.getWithdrawalLogs()
+      .then(logs => setWithdrawalLogs(logs.map((log: any) => ({
+        id: String(log.id),
+        materialName: log.material_name,
+        count: log.count,
+        unit: log.unit || '',
+        user: log.user || '',
+        reason: log.reason || '',
+        date: log.date || log.created_at,
+        status: log.status || '领用中',
+      }))))
+      .catch(error => console.error('加载领用记录失败:', error));
+  }, []);
+
   // 1. 过滤逻辑
   const filteredMaterials = useMemo(() => {
     return materials.filter(item => {
-      const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
+      const name = item.name || '';
+      const matchesSearch = name.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCategory = categoryFilter === '所有分类' || item.category === categoryFilter;
       return matchesSearch && matchesCategory;
     });
@@ -89,9 +116,9 @@ const MaterialManager: React.FC = () => {
 
   // 3. 领用流水过滤
   const filteredWithdrawals = useMemo(() => {
-    return withdrawalLogs.filter(log => 
-      log.materialName.toLowerCase().includes(withdrawalSearch.toLowerCase()) ||
-      log.user.toLowerCase().includes(withdrawalSearch.toLowerCase())
+    return withdrawalLogs.filter(log =>
+      (log.materialName || '').toLowerCase().includes(withdrawalSearch.toLowerCase()) ||
+      (log.user || '').toLowerCase().includes(withdrawalSearch.toLowerCase())
     );
   }, [withdrawalLogs, withdrawalSearch]);
 
@@ -130,6 +157,7 @@ const MaterialManager: React.FC = () => {
         type: formData.get('type') as '常规' | '定制',
         stock: stock,
         unit: formData.get('unit') as string,
+        imageUrl: imagePreview,
       });
 
       setWarehousingLogs([{
@@ -148,7 +176,7 @@ const MaterialManager: React.FC = () => {
       const targetId = formData.get('existingMaterialId') as string;
       const addCount = Number(formData.get('stock'));
 
-      addStock(targetId, addCount);
+      addStock(targetId, addCount, '当前用户', false);
 
       const targetMat = materials.find(m => m.id === targetId);
       setWarehousingLogs([{
@@ -163,6 +191,7 @@ const MaterialManager: React.FC = () => {
 
     setIsWarehousingOpen(false);
     setCustomCategory('');
+    setImagePreview('');
   };
 
   const handleWithdraw = (e: React.FormEvent<HTMLFormElement>) => {
@@ -174,7 +203,7 @@ const MaterialManager: React.FC = () => {
     const reason = formData.get('reason') as string;
     const withdrawalTime = formData.get('withdrawalTime') as string;
 
-    withdraw(selectedMaterial.id, count);
+    withdraw(selectedMaterial.id, count, user, reason);
 
     // 同步到领用流水
     const newWithdrawalLog: WithdrawalLog = {
@@ -219,6 +248,18 @@ const MaterialManager: React.FC = () => {
     link.download = `物料领用流水_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleMarkReturned = async (logId: string) => {
+    try {
+      const updated = await materialsApi.returnWithdrawal(parseInt(logId, 10));
+      setWithdrawalLogs(prev => prev.map(log => log.id === logId ? { ...log, status: updated.status || '已归还' } : log));
+      fetchMaterials();
+      toast.success('已标记归还');
+    } catch (error) {
+      console.error('标记归还失败:', error);
+      toast.error('标记归还失败');
+    }
   };
 
   return (
@@ -294,8 +335,18 @@ const MaterialManager: React.FC = () => {
         </div>
       </div>
 
-      <div className="space-y-4 pb-12">
-        {(Object.entries(groupedMaterials) as [string, Material[]][]).map(([category, items]) => (
+      <AsyncState
+        loading={loading}
+        loadingText="物料数据加载中..."
+        error={error}
+        errorTitle="物料数据加载失败"
+        onRetry={() => fetchMaterials()}
+        empty={!loading && !error && Object.keys(groupedMaterials).length === 0}
+        emptyTitle="暂无物料数据"
+        emptyDescription="请调整筛选条件或登记新物料。"
+      >
+        <div className="space-y-4 pb-12">
+          {(Object.entries(groupedMaterials) as [string, Material[]][]).map(([category, items]) => (
           <div key={category} className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden transition-all group/card">
             <div 
               onClick={() => toggleCategory(category)}
@@ -411,8 +462,9 @@ const MaterialManager: React.FC = () => {
               </div>
             )}
           </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </AsyncState>
 
       {/* 全局领用情况查询 模态框 */}
       {isWithdrawalInquiryOpen && (
@@ -468,6 +520,7 @@ const MaterialManager: React.FC = () => {
                           <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-wider">领用数量</th>
                           <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-wider">领用人/部门</th>
                           <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-wider">领用用途</th>
+                          <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-wider">状态</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
@@ -496,6 +549,18 @@ const MaterialManager: React.FC = () => {
                             </td>
                             <td className="px-8 py-6">
                               <p className="text-xs text-slate-400 font-medium italic">“{log.reason}”</p>
+                            </td>
+                            <td className="px-8 py-6">
+                              <div className="flex items-center gap-2">
+                                <span className={`px-3 py-1 rounded-lg text-xs font-black ${log.status === '已归还' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                  {log.status || '领用中'}
+                                </span>
+                                {log.status !== '已归还' && (
+                                  <button onClick={() => handleMarkReturned(log.id)} className="text-xs font-black text-indigo-600 hover:text-indigo-800">
+                                    标记已归还
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -594,6 +659,30 @@ const MaterialManager: React.FC = () => {
                       <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-1">初始入库数量</label>
                       <input required name="stock" type="number" defaultValue="100" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-xl focus:border-indigo-500 outline-none font-bold text-slate-700" />
                     </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-1">物料图片</label>
+                    <label className="flex items-center gap-4 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 p-4 cursor-pointer hover:border-indigo-300">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = () => setImagePreview(String(reader.result || ''));
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                      <div className="w-20 h-20 rounded-xl bg-white border border-slate-100 overflow-hidden flex items-center justify-center text-slate-300">
+                        {imagePreview ? <img src={imagePreview} alt="物料预览" className="w-full h-full object-cover" /> : <Package size={28} />}
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-slate-600">上传图片并预览</p>
+                        <p className="text-xs text-slate-400 mt-1">支持 PNG、JPG、WEBP</p>
+                      </div>
+                    </label>
                   </div>
                 </div>
               ) : (
@@ -804,8 +893,12 @@ export const MaterialDetailView: React.FC<{
         <div className="lg:col-span-2 space-y-8">
           <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 flex flex-col md:flex-row gap-10 items-start relative overflow-hidden">
              <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full -mr-32 -mt-32"></div>
-             <div className="w-40 h-40 bg-slate-50 rounded-[2rem] flex items-center justify-center text-slate-200 shadow-inner shrink-0 border border-slate-100">
-               <Package size={80} strokeWidth={1} />
+             <div className="w-40 h-40 bg-slate-50 rounded-[2rem] flex items-center justify-center text-slate-200 shadow-inner shrink-0 border border-slate-100 overflow-hidden">
+               {material.imageUrl ? (
+                 <img src={material.imageUrl} alt={material.name} className="w-full h-full object-cover" />
+               ) : (
+                 <Package size={80} strokeWidth={1} />
+               )}
              </div>
              <div className="flex-1 space-y-4">
                <div>
@@ -837,27 +930,26 @@ export const MaterialDetailView: React.FC<{
               最近变更记录 (Activity Logs)
             </h3>
             <div className="space-y-4">
-              {[
-                { type: 'withdraw', user: '市场部-张伟', count: 50, date: '2024-03-22 10:30', reason: 'Q1智能制造路演-上海站' },
-                { type: 'stockin', user: '仓库管理员', count: 200, date: '2024-03-15 14:00', reason: '年度常规补充入库' },
-                { type: 'withdraw', user: '大客户部-李娜', count: 20, date: '2024-03-10 16:45', reason: '新客户拜访礼赠' }
-              ].map((log, i) => (
+              {allLogs.map((log, i) => (
                 <div key={i} className="flex items-start gap-4 p-6 bg-slate-50/50 rounded-xl border border-slate-100 group hover:bg-white hover:shadow-xl hover:shadow-slate-200/20 transition-all">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${log.type === 'withdraw' ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-500'}`}>
-                    {log.type === 'withdraw' ? <MinusCircle size={22} /> : <ArrowUpRight size={22} />}
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${log.type === '出库' ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-500'}`}>
+                    {log.type === '出库' ? <MinusCircle size={22} /> : <ArrowUpRight size={22} />}
                   </div>
                   <div className="flex-1">
                     <div className="flex justify-between items-start mb-1">
-                      <p className="font-black text-slate-800 tracking-tight">{log.type === 'withdraw' ? '出库领用' : '资产入库'}</p>
+                      <p className="font-black text-slate-800 tracking-tight">{log.type === '出库' ? '出库领用' : '资产入库'}</p>
                       <span className="text-[11px] font-bold text-slate-400">{log.date}</span>
                     </div>
-                    <p className="text-sm text-slate-500 font-medium mb-3">操作人：{log.user} · 数量：{log.type === 'withdraw' ? '-' : '+'}{log.count} {material.unit}</p>
+                    <p className="text-sm text-slate-500 font-medium mb-3">操作人：{log.user} · 数量：{log.type === '出库' ? '-' : '+'}{log.count} {material.unit}</p>
                     <div className="p-3 bg-white rounded-xl border border-slate-100 text-[13px] text-slate-400 font-medium">
                        理由：{log.reason}
                     </div>
                   </div>
                 </div>
               ))}
+              {allLogs.length === 0 && (
+                <div className="py-10 text-center text-slate-300 font-black uppercase tracking-widest">暂无流转记录</div>
+              )}
             </div>
           </div>
         </div>

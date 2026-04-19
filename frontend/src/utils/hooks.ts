@@ -6,9 +6,9 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   activitiesApi, materialsApi, suppliersApi,
   opportunitiesApi, budgetApi, reviewsApi,
-  Activity as ApiActivity, Material as ApiMaterial,
-  Supplier as ApiSupplier, Opportunity as ApiOpportunity,
-  BudgetLog as ApiBudgetLog,
+  ApiActivity, ApiMaterial,
+  ApiSupplier, ApiOpportunity,
+  ApiBudgetLog,
   ApiReview, ApiReviewFeedback, ApiReviewConclusion,
   ApiReviewAvgScores, ApiGenerateSummaryResponse
 } from '../services/backendApi';
@@ -83,6 +83,7 @@ export function adaptMaterial(apiMaterial: ApiMaterial): Material {
     status,
     usageCount: apiMaterial.usage_count || 0,
     lastUpdated: apiMaterial.last_updated || new Date().toISOString(),
+    imageUrl: apiMaterial.image_url,
   };
 }
 
@@ -113,18 +114,34 @@ export function adaptOpportunity(apiOpp: ApiOpportunity): Opportunity {
   return {
     id: String(apiOpp.id),
     clientName: apiOpp.client_name || '',
-    company: '',
-    contact: '',
-    phone: '',
-    email: '',
-    requirement: '',
-    contactPerson: '',
-    estimatedValue: apiOpp.value || 0,
-    status: apiOpp.stage || '中意向',
-    createDate: apiOpp.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
-    expectedCloseDate: '',
+    field: apiOpp.field || '',
+    position: apiOpp.position || '',
+    company: apiOpp.company || '',
+    contact: apiOpp.contact || '',
+    contactName: apiOpp.contact_person || apiOpp.contact || '',
+    phone: apiOpp.phone || '',
+    email: apiOpp.email || '',
+    requirement: apiOpp.requirement || '',
+    contactPerson: apiOpp.contact_person || '',
+    estimatedValue: apiOpp.estimated_value || 0,
+    status: apiOpp.status || '潜在客户',
+    createDate: apiOpp.create_date || new Date().toISOString().split('T')[0],
+    expectedCloseDate: apiOpp.expected_close_date || '',
     activityId: apiOpp.activity_id ? String(apiOpp.activity_id) : undefined,
-    notes: '',
+    notes: apiOpp.notes || '',
+    sourceType: (apiOpp.source_type || 'manual') as any,
+    sourceName: apiOpp.source_name || '自主录入',
+    region: apiOpp.region || '',
+    owner: apiOpp.owner || '',
+    leadLevel: (apiOpp.lead_level || '待评估') as any,
+    evaluationNote: apiOpp.evaluation_note || '',
+    transferredToSales: apiOpp.transferred_to_sales === 'true',
+    transferredAt: apiOpp.transferred_at,
+    converted: apiOpp.converted === 'true',
+    conversionStatus: apiOpp.conversion_status as any,
+    conversionAt: apiOpp.conversion_at,
+    resultNote: apiOpp.result_note,
+    createdAt: apiOpp.created_at || new Date().toISOString(),
   };
 }
 
@@ -135,6 +152,7 @@ export function adaptBudgetLog(apiLog: ApiBudgetLog): BudgetLog {
     name: apiLog.name,
     activityId: String(apiLog.activity_id),
     amount: apiLog.amount,
+    plannedAmount: apiLog.planned_amount || 0,
     category: apiLog.category as any,
     date: apiLog.date,
     notes: apiLog.notes || '',
@@ -156,8 +174,7 @@ export function useActivitiesData() {
     setError(null);
     try {
       const response = await activitiesApi.getList(params);
-      const data = Array.isArray(response) ? response : response.activities || [];
-      const adapted = data.map(adaptActivity);
+      const adapted = response.map(adaptActivity);
       setActivities(adapted);
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取活动列表失败');
@@ -257,8 +274,7 @@ export function useMaterialsData() {
     setError(null);
     try {
       const response = await materialsApi.getList(params);
-      const data = Array.isArray(response) ? response : response.materials || response.data || [];
-      const adapted = data.map(adaptMaterial);
+      const adapted = response.map(adaptMaterial);
       setMaterials(adapted);
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取物料列表失败');
@@ -280,6 +296,7 @@ export function useMaterialsData() {
         type: data.type || '常规',
         stock: data.stock || 0,
         unit: data.unit || '个',
+        image_url: data.imageUrl,
         status: data.status || 'In Stock',
         usage_count: data.usageCount || 0,
         last_updated: data.lastUpdated || new Date().toISOString(),
@@ -302,6 +319,7 @@ export function useMaterialsData() {
       if (data.type !== undefined) apiData.type = data.type;
       if (data.stock !== undefined) apiData.stock = data.stock;
       if (data.unit !== undefined) apiData.unit = data.unit;
+      if (data.imageUrl !== undefined) apiData.image_url = data.imageUrl;
       if (data.usageCount !== undefined) apiData.usage_count = data.usageCount;
       if (data.lastUpdated !== undefined) apiData.last_updated = data.lastUpdated;
 
@@ -371,8 +389,7 @@ export function useSuppliersData() {
     setError(null);
     try {
       const response = await suppliersApi.getList(params);
-      const data = Array.isArray(response) ? response : response.suppliers || response.data || [];
-      const adapted = data.map(adaptSupplier);
+      const adapted = response.map(adaptSupplier);
       setSuppliers(adapted);
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取供应商列表失败');
@@ -465,7 +482,7 @@ export function useSuppliersData() {
     }
   }, []);
 
-  const addReview = useCallback(async (id: number, data: { content: string; rating: number }) => {
+  const addReview = useCallback(async (id: number, data: { reviewer_name?: string; content: string; rating: number }) => {
     try {
       await suppliersApi.addReview(id, data);
       // 重新获取供应商详情以更新评价列表
@@ -528,8 +545,7 @@ export function useOpportunitiesData() {
     setError(null);
     try {
       const response = await opportunitiesApi.getList(params);
-      const data = Array.isArray(response) ? response : response.opportunities || response.data || [];
-      const adapted = data.map(adaptOpportunity);
+      const adapted = response.map(adaptOpportunity);
       setOpportunities(adapted);
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取商机列表失败');
@@ -545,7 +561,7 @@ export function useOpportunitiesData() {
 
   const addOpportunity = useCallback(async (data: Partial<Opportunity>) => {
     try {
-      const apiData = {
+      const apiData: Record<string, any> = {
         client_name: data.clientName || '',
         company: data.company || '',
         contact: data.contact || '',
@@ -556,6 +572,10 @@ export function useOpportunitiesData() {
         activity_id: tryParseId(data.activityId || ''),
         expected_close_date: data.expectedCloseDate,
       };
+      // 添加新字段
+      if (data.field) apiData.field = data.field;
+      if (data.position) apiData.position = data.position;
+      if (data.requirement) apiData.requirement = data.requirement;
       const newOpp = await opportunitiesApi.create(apiData);
       const adapted = adaptOpportunity(newOpp);
       setOpportunities(prev => [adapted, ...prev]);
@@ -638,7 +658,7 @@ export function useBudgetData() {
     setError(null);
     try {
       const data = await budgetApi.getActivities(year);
-      setActivitiesWithBudget(data.activities);
+      setActivitiesWithBudget(Array.isArray(data) ? data : data.activities);
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取活动预算失败');
       console.error('Failed to fetch activities with budget:', err);
@@ -688,6 +708,35 @@ export function useBudgetData() {
     }
   }, []);
 
+  const updateLog = useCallback(async (logId: string, data: Partial<BudgetLog>) => {
+    try {
+      const apiData = {
+        name: data.name,
+        activity_id: tryParseId(data.activityId),
+        amount: data.amount,
+        category: data.category,
+        date: data.date,
+        notes: data.notes,
+        status: data.status,
+        type: data.type,
+      };
+      const updatedLog = await budgetApi.updateLog(tryParseId(logId) || 0, apiData);
+      return adaptBudgetLog(updatedLog);
+    } catch (err) {
+      console.error('Failed to update budget log:', err);
+      throw err;
+    }
+  }, []);
+
+  const deleteLog = useCallback(async (logId: string) => {
+    try {
+      return await budgetApi.deleteLog(tryParseId(logId) || 0);
+    } catch (err) {
+      console.error('Failed to delete budget log:', err);
+      throw err;
+    }
+  }, []);
+
   return {
     overview,
     activitiesWithBudget,
@@ -697,7 +746,9 @@ export function useBudgetData() {
     fetchActivitiesWithBudget,
     updateQuota,
     getLogs,
-    createLog
+    createLog,
+    updateLog,
+    deleteLog
   };
 }
 
@@ -721,13 +772,16 @@ export function useReviewsData() {
         activitiesApi.getList(),
       ]);
       const reviews = reviewData || [];
-      const activities = Array.isArray(activitiesData) ? activitiesData : activitiesData.activities || [];
+      const activities = activitiesData;
 
       setAllActivities(activities);
 
       // 合并活动与复盘数据：所有活动都应出现在复盘中心
       const merged = activities.map(activity => {
-        const review = reviews.find((r: any) => r.activity_id === parseInt(activity.id) || r.activityId === activity.id);
+        // 确保 activityId 类型一致（后端返回数字，前端活动ID是字符串）
+        const review = reviews.find((r: any) =>
+          String(r.activity_id ?? r.activityId) === String(activity.id)
+        );
         if (review) {
           return {
             id: review.id || review.review_id,
@@ -947,25 +1001,32 @@ export function useReviewData(activityId: string) {
     setLoading(true);
     setError(null);
     try {
-      // 获取该活动的复盘
-      const reviews = await reviewsApi.getReview(numericActivityId).catch(() => null) as unknown as ApiReview[];
-      if (reviews && (reviews as any).id) {
-        setReview(reviews as any);
-        const reviewId = (reviews as any).id;
+      // 先获取该活动的复盘（返回数组）
+      const reviewList = await reviewsApi.getReview(numericActivityId).catch(() => null);
+
+      // 如果有复盘记录
+      if (reviewList && Array.isArray(reviewList) && reviewList.length > 0) {
+        const reviewData = reviewList[0];
+        setReview(reviewData);
+        const reviewId = reviewData.id;
+
         // 获取反馈列表
         const fbList = await reviewsApi.getFeedbacks(reviewId);
         setFeedbacks(fbList || []);
+
         // 获取平均分
         try {
           const scores = await reviewsApi.getAvgScores(reviewId);
           setAvgScores(scores);
         } catch { setAvgScores(null); }
+
         // 获取结论
         try {
           const concl = await reviewsApi.getConclusion(reviewId);
           setConclusion(concl);
         } catch { setConclusion(null); }
       } else {
+        // 没有复盘记录
         setReview(null);
         setFeedbacks([]);
         setConclusion(null);
@@ -1016,20 +1077,22 @@ export function useReviewData(activityId: string) {
     suggestions?: string;
     tags?: string[];
   }) => {
-    if (!review?.id) {
+    let currentReviewId = review?.id;
+    if (!currentReviewId) {
       // 如果还没有复盘，先创建
       const newReview = await createReview();
       if (!newReview) throw new Error('创建复盘失败');
+      currentReviewId = newReview.id;
     }
     try {
       const feedback = await reviewsApi.createFeedback({
         ...data,
-        review_id: review!.id,
+        review_id: currentReviewId,
       });
       setFeedbacks(prev => [...prev, feedback]);
       // 刷新平均分
       try {
-        const scores = await reviewsApi.getAvgScores(review!.id);
+        const scores = await reviewsApi.getAvgScores(currentReviewId);
         setAvgScores(scores);
       } catch { /* ignore */ }
       return feedback;
@@ -1104,4 +1167,249 @@ export function useReviewData(activityId: string) {
     submitFeedback,
     generateAiSummary,
   };
+}
+
+// ============ 商机线索管理（API驱动）============
+
+/**
+ * 统一商机线索 Hook
+ * 数据完全来自后端 API
+ */
+export function useLeadsData() {
+  const [leads, setLeads] = useState<Opportunity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // 加载商机列表
+  const fetchLeads = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await opportunitiesApi.getList();
+      const adapted = response.map((opp: ApiOpportunity) => ({
+        id: String(opp.id),
+        clientName: opp.client_name || '',
+        company: opp.company || '',
+        contact: opp.contact || '',
+        contactName: opp.contact_person || opp.contact || '',
+        phone: opp.phone || '',
+        email: opp.email || '',
+        field: opp.field || '',
+        position: opp.position || '',
+        requirement: opp.requirement || '',
+        contactPerson: opp.contact_person || '',
+        estimatedValue: opp.estimated_value || 0,
+        status: (opp.status || '未跟进') as any,
+        createDate: opp.create_date || new Date().toISOString().split('T')[0],
+        expectedCloseDate: opp.expected_close_date || '',
+        activityId: opp.activity_id ? String(opp.activity_id) : undefined,
+        notes: opp.notes || '',
+        createdAt: opp.created_at || new Date().toISOString(),
+        // 来源信息
+        sourceType: (opp.source_type || 'manual') as any,
+        sourceName: opp.source_name || '自主录入',
+        // 销售分配
+        region: opp.region || '',
+        owner: opp.owner || '',
+        // 线索等级（默认待评估）
+        leadLevel: (opp.lead_level || '待评估') as any,
+        evaluationNote: opp.evaluation_note || '',
+        transferredToSales: opp.transferred_to_sales === 'true',
+        transferredAt: opp.transferred_at,
+        converted: opp.converted === 'true',
+        conversionStatus: opp.conversion_status as any,
+        conversionAt: opp.conversion_at,
+        resultNote: opp.result_note,
+      }));
+      setLeads(adapted);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '获取商机列表失败');
+      console.error('Failed to fetch opportunities:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // 初始化加载
+  useEffect(() => {
+    fetchLeads();
+  }, [fetchLeads]);
+
+  // 添加商机
+  const addLead = useCallback(async (data: Omit<Opportunity, 'id' | 'createdAt'>) => {
+    try {
+      const apiData = {
+        client_name: data.clientName || '',
+        company: data.company || '',
+        contact: data.contact || '',
+        phone: data.phone || '',
+        email: data.email || '',
+        field: data.field || '',
+        position: data.position || '',
+        requirement: data.requirement || '',
+        contact_person: data.contactPerson || '',
+        estimated_value: data.estimatedValue || 0,
+        status: data.status || '未跟进',
+        create_date: data.createDate || new Date().toISOString().split('T')[0],
+        expected_close_date: data.expectedCloseDate || '',
+        activity_id: data.activityId ? parseInt(data.activityId, 10) : undefined,
+        notes: data.notes || '',
+        // 来源信息
+        source_type: data.sourceType || 'manual',
+        source_name: data.sourceName || '自主录入',
+        // 销售分配
+        region: data.region || '',
+        owner: data.owner || '',
+        lead_level: data.leadLevel || '待评估',
+        evaluation_note: data.evaluationNote || '',
+        transferred_to_sales: data.transferredToSales ? 'true' : 'false',
+        transferred_at: data.transferredAt || '',
+        converted: data.converted ? 'true' : 'false',
+        conversion_status: data.conversionStatus || '',
+        conversion_at: data.conversionAt || '',
+        result_note: data.resultNote || '',
+      };
+      const newOpp = await opportunitiesApi.create(apiData);
+      const adapted: Opportunity = {
+        id: String(newOpp.id),
+        clientName: newOpp.client_name || '',
+        company: newOpp.company || '',
+        contact: newOpp.contact || '',
+        contactName: newOpp.contact_person || newOpp.contact || '',
+        phone: newOpp.phone || '',
+        email: newOpp.email || '',
+        field: newOpp.field || '',
+        position: newOpp.position || '',
+        requirement: newOpp.requirement || '',
+        contactPerson: newOpp.contact_person || '',
+        estimatedValue: newOpp.estimated_value || 0,
+        status: (newOpp.status || '未跟进') as any,
+        createDate: newOpp.create_date || new Date().toISOString().split('T')[0],
+        expectedCloseDate: newOpp.expected_close_date || '',
+        activityId: newOpp.activity_id ? String(newOpp.activity_id) : undefined,
+        notes: newOpp.notes || '',
+        createdAt: newOpp.created_at || new Date().toISOString(),
+        // 来源信息
+        sourceType: (newOpp.source_type || 'manual') as any,
+        sourceName: newOpp.source_name || '自主录入',
+        // 销售分配
+        region: newOpp.region || '',
+        owner: newOpp.owner || '',
+        // 线索等级
+        leadLevel: (newOpp.lead_level || '待评估') as any,
+        evaluationNote: newOpp.evaluation_note || '',
+        transferredToSales: newOpp.transferred_to_sales === 'true',
+        transferredAt: newOpp.transferred_at,
+        converted: newOpp.converted === 'true',
+        conversionStatus: newOpp.conversion_status as any,
+        conversionAt: newOpp.conversion_at,
+        resultNote: newOpp.result_note,
+      };
+      setLeads(prev => [adapted, ...prev]);
+      return adapted;
+    } catch (err) {
+      console.error('Failed to create opportunity:', err);
+      throw err;
+    }
+  }, []);
+
+  // 更新商机
+  const updateLead = useCallback(async (id: string, data: Partial<Opportunity>) => {
+    try {
+      const apiData: Record<string, unknown> = {};
+      if (data.clientName !== undefined) apiData.client_name = data.clientName;
+      if (data.company !== undefined) apiData.company = data.company;
+      if (data.contact !== undefined) apiData.contact = data.contact;
+      if (data.contactName !== undefined) apiData.contact_person = data.contactName;
+      if (data.phone !== undefined) apiData.phone = data.phone;
+      if (data.email !== undefined) apiData.email = data.email;
+      if (data.field !== undefined) apiData.field = data.field;
+      if (data.position !== undefined) apiData.position = data.position;
+      if (data.requirement !== undefined) apiData.requirement = data.requirement;
+      if (data.contactPerson !== undefined) apiData.contact_person = data.contactPerson;
+      if (data.estimatedValue !== undefined) apiData.estimated_value = data.estimatedValue;
+      if (data.status !== undefined) apiData.status = data.status;
+      if (data.expectedCloseDate !== undefined) apiData.expected_close_date = data.expectedCloseDate;
+      if (data.activityId !== undefined) apiData.activity_id = parseInt(data.activityId, 10);
+      if (data.notes !== undefined) apiData.notes = data.notes;
+      // 来源信息
+      if (data.sourceType !== undefined) apiData.source_type = data.sourceType;
+      if (data.sourceName !== undefined) apiData.source_name = data.sourceName;
+      // 销售分配
+      if (data.region !== undefined) apiData.region = data.region;
+      if (data.owner !== undefined) apiData.owner = data.owner;
+      if (data.leadLevel !== undefined) apiData.lead_level = data.leadLevel;
+      if (data.evaluationNote !== undefined) apiData.evaluation_note = data.evaluationNote;
+      if (data.transferredToSales !== undefined) apiData.transferred_to_sales = data.transferredToSales ? 'true' : 'false';
+      if (data.transferredAt !== undefined) apiData.transferred_at = data.transferredAt || '';
+      if (data.converted !== undefined) apiData.converted = data.converted ? 'true' : 'false';
+      if (data.conversionStatus !== undefined) apiData.conversion_status = data.conversionStatus || '';
+      if (data.conversionAt !== undefined) apiData.conversion_at = data.conversionAt || '';
+      if (data.resultNote !== undefined) apiData.result_note = data.resultNote || '';
+
+      await opportunitiesApi.update(parseInt(id, 10), apiData);
+      setLeads(prev => prev.map(lead =>
+        lead.id === id ? { ...lead, ...data } : lead
+      ));
+    } catch (err) {
+      console.error('Failed to update opportunity:', err);
+      throw err;
+    }
+  }, []);
+
+  // 删除商机
+  const deleteLead = useCallback(async (id: string) => {
+    try {
+      await opportunitiesApi.delete(parseInt(id, 10));
+      setLeads(prev => prev.filter(lead => lead.id !== id));
+    } catch (err) {
+      console.error('Failed to delete opportunity:', err);
+      throw err;
+    }
+  }, []);
+
+  // 按活动ID获取线索
+  const getLeadsByActivity = useCallback((activityId: string) => {
+    return leads.filter(lead => lead.activityId === activityId);
+  }, [leads]);
+
+  // 按来源类型获取线索
+  const getLeadsBySource = useCallback((_sourceType: 'activity' | 'manual') => {
+    return leads;
+  }, [leads]);
+
+  // 搜索线索
+  const searchLeads = useCallback((keyword: string) => {
+    const lowerKeyword = keyword.toLowerCase();
+    return leads.filter(lead =>
+      lead.clientName.toLowerCase().includes(lowerKeyword) ||
+      (lead.contactName || '').toLowerCase().includes(lowerKeyword) ||
+      (lead.contact || '').toLowerCase().includes(lowerKeyword) ||
+      (lead.phone || '').includes(keyword) ||
+      (lead.requirement || '').toLowerCase().includes(lowerKeyword)
+    );
+  }, [leads]);
+
+  return {
+    leads,
+    loading,
+    error,
+    addLead,
+    updateLead,
+    deleteLead,
+    getLeadsByActivity,
+    getLeadsBySource,
+    searchLeads,
+    refreshLeads: fetchLeads,
+  };
+}
+
+// 保留兼容函数（废弃）
+export function getAllLeads(): Opportunity[] {
+  console.warn('getAllLeads is deprecated, use useLeadsData hook instead');
+  return [];
+}
+
+export function clearAllLeads(): void {
+  console.warn('clearAllLeads is deprecated, use opportunitiesApi instead');
 }

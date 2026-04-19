@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PRESET_REVIEW_TAGS } from '../../constants';
+import { PRESET_REVIEW_TAGS } from '../../types';
 import { ReviewFeedback } from '../../types';
 import { Check } from 'lucide-react';
 import ScoreInput from './ScoreInput';

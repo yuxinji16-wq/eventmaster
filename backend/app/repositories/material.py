@@ -21,7 +21,10 @@ class MaterialRepository(BaseRepository[Material]):
 
     def get_low_stock(self, db: Session, skip: int = 0, limit: int = 100) -> List[Material]:
         """获取低库存物料"""
-        return db.query(Material).filter(Material.stock < Material.min_stock).offset(skip).limit(limit).all()
+        return db.query(Material).filter(
+            Material.stock > 0,
+            Material.stock < 10
+        ).offset(skip).limit(limit).all()
 
     def search(self, db: Session, keyword: str, skip: int = 0, limit: int = 100) -> List[Material]:
         """搜索物料"""

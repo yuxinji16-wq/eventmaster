@@ -68,6 +68,27 @@ class WithdrawalLogService(BaseService[WithdrawalLog, WithdrawalLogRepository]):
     def get_by_activity(self, db: Session, activity_id: int, skip: int = 0, limit: int = 100) -> List[WithdrawalLog]:
         return self.repository.get_by_activity(db, activity_id, skip, limit)
 
+    def mark_returned(self, db: Session, log_id: int, return_count: Optional[float] = None) -> Optional[WithdrawalLog]:
+        """标记领用记录归还，并恢复库存"""
+        log = self.repository.get(db, log_id)
+        if not log:
+            return None
+
+        from datetime import datetime
+
+        returned_count = return_count if return_count is not None else (log.count or 0)
+        log.return_count = (log.return_count or 0) + returned_count
+        log.returned_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log.status = "已归还" if (log.return_count or 0) >= (log.count or 0) else "部分归还"
+
+        material_repo = MaterialRepository()
+        material = material_repo.get(db, log.material_id)
+        if material:
+            material.stock += returned_count
+        db.commit()
+        db.refresh(log)
+        return log
+
     def create_withdrawal(self, db: Session, data: dict) -> WithdrawalLog:
         """创建出库记录并更新库存"""
         # 兼容前端字段名

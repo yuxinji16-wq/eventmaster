@@ -68,13 +68,13 @@ export const authApi = {
 
 export const userApi = {
   getList: () =>
-    request<User[]>('/users'),
+    request<User[]>('/users/'),
 
   get: (id: number) =>
     request<User>(`/users/${id}`),
 
   create: (data: { username: string; email: string; password: string; role_id?: number }) =>
-    request<User>('/users', {
+    request<User>('/users/', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
@@ -96,13 +96,13 @@ export const userApi = {
 
 export const roleApi = {
   getList: () =>
-    request<Role[]>('/roles'),
+    request<Role[]>('/roles/'),
 
   get: (id: number) =>
     request<Role>(`/roles/${id}`),
 
   create: (data: { name: string; description?: string; permissions?: Record<string, Record<string, boolean>> }) =>
-    request<Role>('/roles', {
+    request<Role>('/roles/', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
@@ -121,10 +121,10 @@ export const roleApi = {
 
 export const settingsApi = {
   get: () =>
-    request<any>('/settings'),
+    request<any>('/settings/'),
 
   update: (data: any) =>
-    request<any>('/settings', {
+    request<any>('/settings/', {
       method: 'PUT',
       body: JSON.stringify(data),
     }),

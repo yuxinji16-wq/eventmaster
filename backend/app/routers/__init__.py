@@ -2,6 +2,7 @@
 API Router 导出
 """
 from app.routers.activity import router as activity_router
+from app.routers.task import router as task_router
 from app.routers.material import router as material_router
 from app.routers.supplier import router as supplier_router
 from app.routers.budget import router as budget_router
@@ -12,9 +13,11 @@ from app.routers.auth import router as auth_router
 from app.routers.users import router as users_router
 from app.routers.roles import router as roles_router
 from app.routers.settings import router as settings_router
+from app.routers.notification import router as notification_router
 
 __all__ = [
     "activity_router",
+    "task_router",
     "material_router",
     "supplier_router",
     "budget_router",
@@ -25,4 +28,5 @@ __all__ = [
     "users_router",
     "roles_router",
     "settings_router",
+    "notification_router",
 ]

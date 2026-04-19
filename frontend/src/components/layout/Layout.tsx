@@ -1,8 +1,11 @@
 import React from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import { Bell, Search, Settings } from 'lucide-react';
-import { AppRoutes, RouteMetaMap } from '../../utils/routes';
+import { Bell, Settings } from 'lucide-react';
+import { AppRoutes } from '../../utils/routes';
+import NotificationCenter from '../../shared/NotificationCenter';
+import { useNotification } from '../../shared/NotificationContext';
+import { GlobalSearch } from '../search';
 
 const SIDEBAR_ITEMS = [
   { id: 'dashboard', path: AppRoutes.HOME, label: '数据仪表盘' },
@@ -23,6 +26,7 @@ const Layout: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const pageTitle = getPageTitle(location.pathname);
+  const { unreadCount, setIsOpen, isOpen } = useNotification();
 
   const handleNavigate = (path: string) => {
     navigate(path);
@@ -48,21 +52,28 @@ const Layout: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="relative group hidden lg:block">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={16} />
-              <input
-                type="text"
-                placeholder="键入关键词快速检索..."
-                className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-all w-64 text-sm font-medium text-slate-700"
-              />
+            <div className="hidden lg:block">
+              <GlobalSearch className="w-64" />
             </div>
 
             <div className="flex items-center gap-2">
-              <button className="p-2 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 hover:border-indigo-100 transition-all relative shadow-sm">
-                <Bell size={18} />
-                <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full border border-white"></span>
-              </button>
-              <button className="p-2 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 hover:border-indigo-100 transition-all shadow-sm">
+              <div className="relative" id="notification-bell">
+                <button
+                  onClick={() => setIsOpen(!isOpen)}
+                  className={`p-2 bg-white border border-slate-200 rounded-xl transition-all relative shadow-sm cursor-pointer ${
+                    isOpen || unreadCount > 0 ? 'text-indigo-500 bg-indigo-50 border-indigo-100' : 'text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 hover:border-indigo-100'
+                  }`}
+                >
+                  <Bell size={18} />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 text-white text-[10px] font-black flex items-center justify-center rounded-full border-2 border-white shadow-sm">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </button>
+                <NotificationCenter />
+              </div>
+              <button className="p-2 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 hover:border-indigo-100 transition-all shadow-sm cursor-pointer">
                 <Settings size={18} />
               </button>
             </div>

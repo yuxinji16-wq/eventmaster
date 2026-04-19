@@ -9,6 +9,7 @@ from app.core.middleware import RequestLoggingMiddleware, ErrorHandlingMiddlewar
 from app.db.init_db import init_db
 from app.routers import (
     activity_router,
+    task_router,
     material_router,
     supplier_router,
     budget_router,
@@ -19,12 +20,14 @@ from app.routers import (
     users_router,
     roles_router,
     settings_router,
+    notification_router,
 )
 
 app = FastAPI(
     title=settings.APP_NAME,
     description="全生命周期活动管理平台 API",
-    version="1.0.0"
+    version="1.0.0",
+    redirect_slashes=False,  # 禁用尾部斜杠重定向
 )
 
 # CORS配置
@@ -50,6 +53,7 @@ def on_startup():
 
 # 注册路由（统一添加 /api 前缀）
 app.include_router(activity_router, prefix="/api")
+app.include_router(task_router, prefix="/api")
 app.include_router(material_router, prefix="/api")
 app.include_router(supplier_router, prefix="/api")
 app.include_router(budget_router, prefix="/api")
@@ -60,6 +64,7 @@ app.include_router(auth_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
 app.include_router(roles_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
+app.include_router(notification_router, prefix="/api")
 
 
 @app.get("/")

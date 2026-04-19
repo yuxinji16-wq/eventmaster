@@ -189,12 +189,12 @@ const Account: React.FC = () => {
                 </td>
                 <td className="px-6 py-4 text-slate-600">{user.email}</td>
                 <td className="px-6 py-4">
-                  <span className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-sm font-bold">
+                  <span className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-sm font-bold" data-testid="role-badge">
                     {user.is_superadmin ? '超级管理员' : getRoleName(user.role_id)}
                   </span>
                 </td>
                 <td className="px-6 py-4">
-                  <span className={`px-3 py-1 rounded-lg text-sm font-bold ${user.is_active ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
+                  <span className={`px-3 py-1 rounded-lg text-sm font-bold ${user.is_active ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'}`} data-testid="status-badge">
                     {user.is_active ? '活跃' : '禁用'}
                   </span>
                 </td>
@@ -205,12 +205,14 @@ const Account: React.FC = () => {
                         <button
                           onClick={() => openEditModal(user)}
                           className="p-2 hover:bg-indigo-50 rounded-lg text-slate-400 hover:text-indigo-600"
+                          aria-label="编辑"
                         >
                           <Edit2 size={16} />
                         </button>
                         <button
                           onClick={() => handleDelete(user.id)}
                           className="p-2 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600"
+                          aria-label="删除"
                         >
                           <Trash2 size={16} />
                         </button>
@@ -260,8 +262,9 @@ const Account: React.FC = () => {
               )}
 
               <div>
-                <label className="text-sm font-bold text-slate-600 block mb-2">用户名</label>
+                <label htmlFor="username" className="text-sm font-bold text-slate-600 block mb-2">用户名</label>
                 <input
+                  id="username"
                   type="text"
                   value={formData.username}
                   onChange={(e) => setFormData({ ...formData, username: e.target.value })}
@@ -271,8 +274,9 @@ const Account: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-sm font-bold text-slate-600 block mb-2">邮箱</label>
+                <label htmlFor="email" className="text-sm font-bold text-slate-600 block mb-2">邮箱</label>
                 <input
+                  id="email"
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -282,10 +286,11 @@ const Account: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-sm font-bold text-slate-600 block mb-2">
+                <label htmlFor="password" className="text-sm font-bold text-slate-600 block mb-2">
                   密码 {editingUser && <span className="text-slate-400 font-normal">(留空则不修改)</span>}
                 </label>
                 <input
+                  id="password"
                   type="password"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
@@ -295,8 +300,9 @@ const Account: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-sm font-bold text-slate-600 block mb-2">角色</label>
+                <label htmlFor="role_id" className="text-sm font-bold text-slate-600 block mb-2">角色</label>
                 <select
+                  id="role_id"
                   value={formData.role_id || ''}
                   onChange={(e) => setFormData({ ...formData, role_id: e.target.value ? Number(e.target.value) : null })}
                   className="w-full px-4 py-2.5 border-2 border-slate-200 rounded-xl focus:border-indigo-500 outline-none"

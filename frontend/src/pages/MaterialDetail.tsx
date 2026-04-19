@@ -1,10 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Material } from '../types';
-import { materialsApi, ApiMaterial } from '../services/backendApi';
+import { materialsApi } from '../services/backendApi';
 import { BackButton, Card, LoadingSpinner } from '../shared';
 import { MaterialDetailView } from '../components/material/MaterialManager';
 import { adaptMaterial } from '../utils/hooks';
+
+interface WarehousingLog {
+  id: string;
+  materialName: string;
+  count: number;
+  operator: string;
+  date: string;
+  isNewType: boolean;
+}
+
+interface WithdrawalLog {
+  id: string;
+  materialName: string;
+  count: number;
+  unit: string;
+  user: string;
+  reason: string;
+  date: string;
+  status?: string;
+}
 
 const MaterialDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -19,9 +39,31 @@ const MaterialDetail: React.FC = () => {
   useEffect(() => {
     if (id) {
       setLoading(true);
-      materialsApi.getDetail(parseInt(id))
-        .then(data => {
+      Promise.all([
+        materialsApi.getDetail(parseInt(id)),
+        materialsApi.getWarehousingLogs(parseInt(id)),
+        materialsApi.getWithdrawalLogs({ materialId: parseInt(id) }),
+      ])
+        .then(([data, warehousing, withdrawals]) => {
           setMaterial(adaptMaterial(data));
+          setWarehousingLogs(warehousing.map((log: any) => ({
+            id: String(log.id),
+            materialName: log.material_name,
+            count: log.count,
+            operator: log.operator || '',
+            date: log.date || log.created_at,
+            isNewType: log.is_new_type === true || log.is_new_type === 'true',
+          })));
+          setWithdrawalLogs(withdrawals.map((log: any) => ({
+            id: String(log.id),
+            materialName: log.material_name,
+            count: log.count,
+            unit: log.unit || '',
+            user: log.user || '',
+            reason: log.reason || '',
+            date: log.date || log.created_at,
+            status: log.status || '领用中',
+          })));
         })
         .catch(err => {
           setMaterial(null);

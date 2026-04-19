@@ -18,12 +18,14 @@ class SupplierRepository(BaseRepository[Supplier]):
         return db.query(Supplier).filter(Supplier.name == name).first()
 
     def get_by_category(self, db: Session, category: str, skip: int = 0, limit: int = 100) -> List[Supplier]:
-        return db.query(Supplier).filter(Supplier.category == category).offset(skip).limit(limit).all()
+        return db.query(Supplier).filter(
+            (Supplier.category == category) | (Supplier.service_type == category)
+        ).offset(skip).limit(limit).all()
 
     def search(self, db: Session, keyword: str, skip: int = 0, limit: int = 100) -> List[Supplier]:
         keyword_filter = f"%{keyword}%"
         return db.query(Supplier).filter(
-            Supplier.name.ilike(keyword_filter) | Supplier.category.ilike(keyword_filter)
+            Supplier.name.ilike(keyword_filter) | Supplier.contact.ilike(keyword_filter)
         ).offset(skip).limit(limit).all()
 
 
@@ -62,5 +64,5 @@ class BillRepository(BaseRepository[Bill]):
         return db.query(Bill).filter(Bill.status == status).offset(skip).limit(limit).all()
 
     def get_pending(self, db: Session, skip: int = 0, limit: int = 100) -> List[Bill]:
-        """获取待付款账单"""
-        return db.query(Bill).filter(Bill.status == "待付款").offset(skip).limit(limit).all()
+        """获取待结算账单"""
+        return db.query(Bill).filter(Bill.status == "待结算").offset(skip).limit(limit).all()
