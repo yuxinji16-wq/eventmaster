@@ -12,7 +12,7 @@ import {
   Activity, ActivityStatus, ActivityTask, ActivityStage, ACTIVITY_STAGES, RiskLevel,
   ExpenseItem, Opportunity, Material, Supplier, PRESET_REVIEW_TAGS
 } from '../types';
-import { useActivitiesData, useSuppliersData, useMaterialsData, useLeadsData, useReviewData, useReviewsData } from '../utils/hooks';
+import { useActivitiesData, useSuppliersData, useMaterialsData, useLeadsData, useReviewData, useReviewsData, useMediaData } from '../utils/hooks';
 import { materialsApi, activitiesApi, tasksApi, budgetApi, suppliersApi } from '../services/backendApi';
 import { useToast } from '../shared/Toast';
 import {
@@ -23,17 +23,21 @@ import {
   Zap, Wallet, Users, Package, TrendingUp, ClipboardCheck,
   ArrowLeft, AlertCircle, CheckCircle2, Loader2,
   User, ChevronDown, ChevronUp, Edit, Star, Trash2,
-  FileText, UploadCloud, Download, Sparkles, Upload
+  FileText, UploadCloud, Download, Sparkles, Upload, Newspaper
 } from 'lucide-react';
+import { MediaTab } from '../features/activity/detail/MediaTab';
+import { ActivityHealthAnalysis } from '../features/activity/components/ActivityHealthAnalysis';
+import { ActivityMaterials } from '../features/activity/components/ActivityMaterials';
+import ExternalActivityDetailPage from '../features/external-activity/pages/ExternalActivityDetailPage';
 
 // ============ 常量 ============
 
 const TABS = [
-  { id: 'progress', label: '执行进度', icon: Zap },
-  { id: 'budget', label: '预算', icon: Wallet },
+  { id: 'budget', label: '费用明细', icon: Wallet },
   { id: 'supplier', label: '供应商', icon: Users },
   { id: 'material', label: '物料', icon: Package },
   { id: 'opportunity', label: '商机', icon: TrendingUp },
+  { id: 'media', label: '媒体传播', icon: Newspaper },
   { id: 'review', label: '复盘', icon: ClipboardCheck },
 ];
 
@@ -1865,6 +1869,9 @@ const ActivityDetail: React.FC = () => {
   // 使用统一的商机线索 Hook
   const { leads, addLead, updateLead, deleteLead } = useLeadsData();
 
+  // 媒体数据 Hook
+  const { stats: mediaStats } = useMediaData(id || '');
+
   // 本地数据状态
   const [tasks, setTasks] = useState<ActivityTask[]>([]);
   const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
@@ -1986,6 +1993,20 @@ const ActivityDetail: React.FC = () => {
     if (!activity) return '';
     return getStatusSummary(activity, tasks);
   }, [activity, tasks]);
+
+  // 计算待处理任务和下一个任务（从主组件复制）
+  const pendingTasksMemo = useMemo(() => {
+    const sortedTasks = [...tasks].sort((a, b) => {
+      const priorityOrder: Record<string, number> = { 'P0': 0, 'P1': 1, 'P2': 2 };
+      const priorityDiff = (priorityOrder[a.priority] || 99) - (priorityOrder[b.priority] || 99);
+      if (priorityDiff !== 0) return priorityDiff;
+      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+    });
+    return sortedTasks.filter((t: ActivityTask) => t.status !== '已完成');
+  }, [tasks]);
+
+  const pendingTasks = pendingTasksMemo.length;
+  const nextTask = pendingTasksMemo[0] || null;
 
   // 保存编辑
   const handleSave = async () => {
@@ -2346,16 +2367,28 @@ const ActivityDetail: React.FC = () => {
     );
   }
 
+  // 根据活动类型渲染不同的详情页
+  // 兼容判断：type='external' 或 category='外部市场活动' 都视为外部活动
+  const isExternalEvent = activity.type === 'external' || activity.category === '外部市场活动';
+  if (isExternalEvent) {
+    return <ExternalActivityDetailPage activity={activity} />;
+  }
+
+  // 自办活动详情页
   const totalExpenses = (expenses || []).reduce((sum: number, e: ExpenseItem) => sum + (e.actualAmount || 0), 0) || (activity?.actualSpend || 0);
   const executionRate = (activity?.budget || 0) > 0 ? (totalExpenses / (activity?.budget || 0)) * 100 : 0;
   const currentStage = activity?.currentStage || activity?.status || '待启动';
 
   return (
-    <div className="space-y-4">
+    <>
       {/* 返回 */}
       <button onClick={() => navigate(`/activities?year=${activity.year}`)} className="flex items-center gap-2 text-slate-500 hover:text-slate-700"><ArrowLeft size={16} /> 返回活动列表</button>
 
-      {/* ========== 1. 顶部状态卡 ========== */}
+      {/* 两栏布局 */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* 左侧主内容区 */}
+        <div className="lg:col-span-2 space-y-4">
+          {/* ========== 1. 顶部状态卡 ========== */}
       <div className={`rounded-xl p-6 text-white ${
         activity.status === '已完成' ? 'bg-gradient-to-r from-emerald-500 to-emerald-600' :
         activity.status === '进行中' ? 'bg-gradient-to-r from-blue-500 to-blue-600' :
@@ -2446,12 +2479,137 @@ const ActivityDetail: React.FC = () => {
         </Card>
       )}
 
-      {/* ========== 2. 执行进度（核心主轴） ========== */}
+      {/* ========== 2. 执行控制区（核心区域）========== */}
+      {/* 执行进度阶段条 */}
       <Card>
-        <h3 className="font-bold text-slate-800 mb-4">执行进度</h3>
-        <div className="mb-4">
-          <p className="text-sm text-indigo-600 font-medium mb-3">当前阶段：{currentStage}</p>
-          <StageProgressBar currentStage={currentStage} />
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <Zap size={18} className="text-indigo-500" />
+            <h3 className="font-bold text-slate-800">执行控制</h3>
+            <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded text-xs font-medium">
+              {currentStage}
+            </span>
+          </div>
+          {pendingTasks > 0 && (
+            <span className="text-xs text-slate-500">
+              <span className="font-bold text-indigo-600">{pendingTasks}</span> 项任务进行中
+            </span>
+          )}
+        </div>
+        <StageProgressBar currentStage={currentStage} />
+      </Card>
+
+      {/* 下一步动作 + 任务列表 */}
+      <Card>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* 左侧：下一步动作 */}
+          <div className="lg:col-span-1">
+            <h4 className="text-xs font-bold text-slate-400 uppercase mb-3">下一步动作</h4>
+            {nextTask ? (
+              <div className="p-4 bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 rounded-xl">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-800 truncate">{nextTask.name}</p>
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${getPriorityColor(nextTask.priority).bg} ${getPriorityColor(nextTask.priority).text}`}>
+                        {nextTask.priority}
+                      </span>
+                      <span className="text-xs text-slate-500">{nextTask.assignee || '未分配'}</span>
+                      {nextTask.dueDate && (
+                        <>
+                          <span className="text-xs text-slate-400">·</span>
+                          <span className="text-xs text-slate-500">{nextTask.dueDate}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleCompleteTask(nextTask.id)}
+                    className="shrink-0 px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1"
+                  >
+                    <Check size={14} /> 完成
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl text-center">
+                <CheckCircle2 size={24} className="text-emerald-500 mx-auto mb-2" />
+                <p className="text-sm font-medium text-emerald-700">所有任务已完成</p>
+              </div>
+            )}
+          </div>
+
+          {/* 右侧：任务列表 */}
+          <div className="lg:col-span-2">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-xs font-bold text-slate-400 uppercase">任务列表 ({tasks.length})</h4>
+              <div className="flex gap-2">
+                <Button size="xs" variant="ghost" icon={<Download size={12} />} onClick={() => setTaskImportOpen(true)}>
+                  导入
+                </Button>
+                <Button size="xs" variant="outline" icon={<Plus size={12} />} onClick={() => setTaskModalOpen(true)}>
+                  新增
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-2 max-h-[300px] overflow-y-auto">
+              {[...tasks].sort((a, b) => {
+                const priorityOrder: Record<string, number> = { 'P0': 0, 'P1': 1, 'P2': 2 };
+                if ((priorityOrder[a.priority] || 99) !== (priorityOrder[b.priority] || 99)) {
+                  return (priorityOrder[a.priority] || 99) - (priorityOrder[b.priority] || 99);
+                }
+                if (a.status === '已完成' && b.status !== '已完成') return 1;
+                if (a.status !== '已完成' && b.status === '已完成') return -1;
+                return 0;
+              }).slice(0, 8).map(task => (
+                <div key={task.id} className="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${task.status === '已完成' ? 'bg-emerald-100 text-emerald-600' : getPriorityColor(task.priority).bg + ' ' + getPriorityColor(task.priority).text}`}>
+                      {task.status === '已完成' ? <Check size={12} /> : task.priority}
+                    </span>
+                    <span className={`text-sm truncate ${task.status === '已完成' ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                      {task.name}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs text-slate-400">{task.assignee || '-'}</span>
+                    {task.status !== '已完成' && (
+                      <button
+                        onClick={() => handleCompleteTask(task.id)}
+                        className="p-1 hover:bg-emerald-100 rounded text-slate-400 hover:text-emerald-600"
+                        title="完成任务"
+                      >
+                        <Check size={14} />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => { setEditingTask(task); setTaskModalOpen(true); }}
+                      className="p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-600"
+                      title="编辑"
+                    >
+                      <Edit size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {tasks.length > 8 && (
+              <button
+                onClick={() => { setActiveTab('budget'); }}
+                className="w-full mt-3 py-2 text-xs text-indigo-500 font-medium hover:bg-indigo-50 rounded-lg transition-colors"
+              >
+                查看全部 {tasks.length} 项任务...
+              </button>
+            )}
+            {tasks.length === 0 && (
+              <div className="text-center py-6 text-slate-400">
+                <p className="text-sm">暂无任务</p>
+                <Button size="sm" variant="outline" icon={<Plus size={14} />} onClick={() => setTaskModalOpen(true)} className="mt-2">
+                  添加首个任务
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       </Card>
 
@@ -2460,116 +2618,52 @@ const ActivityDetail: React.FC = () => {
         <RiskAlert risk={riskLevel} message={riskLevel === 'danger' ? '存在延期任务或P0任务未完成，需立即处理' : '有P0任务进行中或预算接近上限'} />
       )}
 
-      {/* ========== 3. 下方布局 ========== */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* 左侧 Tab 区 */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Tab 导航 */}
-          <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
-            <div className="flex border-b border-slate-100 overflow-x-auto">
-              {TABS.map(tab => (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
-                    activeTab === tab.id ? 'text-indigo-600 border-indigo-600 bg-indigo-50/50' : 'text-slate-400 border-transparent hover:text-slate-600'
-                  }`}>
-                  <tab.icon size={14} />
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-            <div className="p-4">
-              {activeTab === 'progress' && <ProgressTab tasks={tasks} onAddTask={handleAddTask} onEditTask={handleEditTask} onCompleteTask={handleCompleteTask} onDeleteTask={handleDeleteTask} onImportTasks={() => setTaskImportOpen(true)} />}
-              {activeTab === 'budget' && <BudgetTab activity={activity} expenses={expenses} onAddExpense={handleAddExpense} onEditExpense={handleEditExpense} onDeleteExpense={handleDeleteExpense} />}
-              {activeTab === 'supplier' && <SupplierTabContent suppliers={suppliers} onAdd={() => setSupplierModalOpen(true)} onConfirm={handleConfirmSupplier} onStatusChange={handleSupplierStatusChange} />}
-              {activeTab === 'material' && <MaterialTabContent materials={materials} onAdd={() => setMaterialModalOpen(true)} onStatusChange={handleMaterialStatusChange} />}
-              {activeTab === 'opportunity' && <OpportunityTabContent opportunities={opportunities} onAdd={() => setOpportunityModalOpen(true)} onOpen={(oppId) => navigate(`/opportunities/${oppId}`)} />}
-              {activeTab === 'review' && <ReviewTab activityId={id || ''} />}
-            </div>
-          </div>
+      {/* ========== 3. 活动记录区（Tab区域）========== */}
+      <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
+        {/* Tab 导航 */}
+        <div className="flex border-b border-slate-100 overflow-x-auto">
+          {TABS.map(tab => (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                activeTab === tab.id ? 'text-indigo-600 border-indigo-600 bg-indigo-50/50' : 'text-slate-400 border-transparent hover:text-slate-600'
+              }`}>
+              <tab.icon size={14} />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        {/* Tab 内容 */}
+        <div className="p-4">
+          {activeTab === 'budget' && <BudgetTab activity={activity} expenses={expenses} onAddExpense={handleAddExpense} onEditExpense={handleEditExpense} onDeleteExpense={handleDeleteExpense} />}
+          {activeTab === 'supplier' && <SupplierTabContent suppliers={suppliers} onAdd={() => setSupplierModalOpen(true)} onConfirm={handleConfirmSupplier} onStatusChange={handleSupplierStatusChange} />}
+          {activeTab === 'material' && <MaterialTabContent materials={materials} onAdd={() => setMaterialModalOpen(true)} onStatusChange={handleMaterialStatusChange} />}
+          {activeTab === 'opportunity' && <OpportunityTabContent opportunities={opportunities} onAdd={() => setOpportunityModalOpen(true)} onOpen={(oppId) => navigate(`/opportunities/${oppId}`)} />}
+          {activeTab === 'media' && <MediaTab activityId={id || ''} />}
+          {activeTab === 'review' && <ReviewTab activityId={id || ''} />}
+        </div>
+      </div>
         </div>
 
-        {/* 右侧面板 */}
-        <div className="space-y-4">
-          {/* 资料上传与下载 */}
-          <Card>
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-500">
-                <FileText size={18} />
-              </div>
-              <h3 className="font-bold text-slate-800">活动资料</h3>
-            </div>
-            <div className="space-y-3">
-              <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center hover:border-indigo-400 transition-colors cursor-pointer">
-                <UploadCloud size={24} className="mx-auto mb-2 text-slate-300" />
-                <p className="text-sm font-medium text-slate-500">点击或拖拽上传文件</p>
-                <p className="text-xs text-slate-400 mt-1">支持 PDF、Word、图片等</p>
-              </div>
-              <div className="space-y-2">
-                <p className="text-xs font-bold text-slate-400 uppercase">已上传文件</p>
-                <div className="space-y-2 max-h-32 overflow-y-auto">
-                  <div className="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <FileText size={14} className="text-slate-400" />
-                      <span className="text-xs font-medium text-slate-600 truncate max-w-[120px]">活动策划方案.pdf</span>
-                    </div>
-                    <button className="p-1 hover:bg-slate-200 rounded"><Download size={12} className="text-slate-400" /></button>
-                  </div>
-                  <div className="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <FileText size={14} className="text-slate-400" />
-                      <span className="text-xs font-medium text-slate-600 truncate max-w-[120px]">现场布置图.jpg</span>
-                    </div>
-                    <button className="p-1 hover:bg-slate-200 rounded"><Download size={12} className="text-slate-400" /></button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </Card>
+        {/* 右侧辅助信息区（固定侧边栏） */}
+        <div className="space-y-4 lg:sticky lg:top-4 lg:self-start">
+          {/* 活动资料 - 真实文件管理 */}
+          <ActivityMaterials activityId={id || ''} activityName={activity?.name} />
 
-          {/* AI 复盘总结 */}
-          <Card>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-500">
-                  <Sparkles size={18} />
-                </div>
-                <h3 className="font-bold text-slate-800">AI 复盘总结</h3>
-              </div>
-              <Button size="sm" variant="outline" icon={<Sparkles size={14} />} onClick={handleGenerateSummary}>
-                重新生成
-              </Button>
-            </div>
-            <div className="space-y-3">
-              <div className="p-3 bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl">
-                <p className="text-xs font-bold text-amber-600 mb-1">活动成效</p>
-                <p className="text-sm text-slate-700 leading-relaxed">
-                  {aiSummary.activityOverview || '本次线上沙龙活动参与人数达 86 人，其中高意向客户占比 37%，留资效果良好。通过多渠道宣传，传播覆盖面较广。'}
-                </p>
-              </div>
-              <div className="p-3 bg-emerald-50 rounded-xl">
-                <p className="text-xs font-bold text-emerald-600 mb-1">成功亮点</p>
-                <ul className="text-sm text-slate-700 space-y-1">
-                  <li className="flex items-start gap-1"><Check size={12} className="text-emerald-500 mt-0.5 shrink-0" /> 客户质量高，商务洽谈转化率预期达 25%</li>
-                  <li className="flex items-start gap-1"><Check size={12} className="text-emerald-500 mt-0.5 shrink-0" /> 场地布置简洁大气，物料充足</li>
-                  <li className="flex items-start gap-1"><Check size={12} className="text-emerald-500 mt-0.5 shrink-0" /> 流程紧凑，无明显冷场环节</li>
-                </ul>
-              </div>
-              <div className="p-3 bg-rose-50 rounded-xl">
-                <p className="text-xs font-bold text-rose-600 mb-1">待改进</p>
-                <ul className="text-sm text-slate-700 space-y-1">
-                  <li className="flex items-start gap-1"><AlertCircle size={12} className="text-rose-500 mt-0.5 shrink-0" /> 签到环节略有延迟，建议提前 15 分钟开放</li>
-                  <li className="flex items-start gap-1"><AlertCircle size={12} className="text-rose-500 mt-0.5 shrink-0" /> 茶歇区域略显拥挤</li>
-                </ul>
-              </div>
-              <div className="p-3 bg-indigo-50 rounded-xl">
-                <p className="text-xs font-bold text-indigo-600 mb-1">改进建议</p>
-                <ul className="text-sm text-slate-700 space-y-1">
-                  <li className="flex items-start gap-1"><TrendingUp size={12} className="text-indigo-500 mt-0.5 shrink-0" /> 下次活动建议设置专属 VIP 洽谈区</li>
-                  <li className="flex items-start gap-1"><TrendingUp size={12} className="text-indigo-500 mt-0.5 shrink-0" /> 增加线上直播互动环节</li>
-                </ul>
-              </div>
-            </div>
-          </Card>
+          {/* AI 活动健康度分析 */}
+          <ActivityHealthAnalysis
+            activityId={id || ''}
+            activityName={activity?.name || ''}
+            activityStatus={activity?.status || ''}
+            currentStage={currentStage}
+            tasks={tasks}
+            expenses={expenses}
+            budget={activity?.budget || 0}
+            suppliers={suppliers}
+            materials={materials}
+            opportunities={opportunities}
+            mediaStats={mediaStats}
+            leadsCount={activity?.leads || 0}
+          />
         </div>
       </div>
 
@@ -2600,7 +2694,7 @@ const ActivityDetail: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
 

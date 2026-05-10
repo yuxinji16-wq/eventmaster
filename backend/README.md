@@ -10,7 +10,7 @@
 | ORM | SQLAlchemy 2.0 |
 | 数据库 | SQLite / MySQL (通过 DATABASE_URL 切换) |
 | 验证 | Pydantic v2 |
-| 迁移 | Alembic |
+| 迁移 | 规划中（当前未落地） |
 | 异步 | Uvicorn |
 | 认证 | JWT (jose) + bcrypt |
 
@@ -145,3 +145,9 @@ python -m pytest tests/ -v
 # 运行覆盖率
 python -m pytest tests/ --cov=app
 ```
+
+## 当前治理重点（2026-05-10）
+
+- 优先补齐业务路由的认证与权限校验覆盖。
+- 改造默认管理员初始化策略，避免生产使用固定默认口令。
+- 引入 Alembic 迁移链路，替代启动时结构修补逻辑。

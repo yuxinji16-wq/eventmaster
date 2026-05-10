@@ -25,6 +25,7 @@ const Login = React.lazy(() => import('./pages/Login'));
 const Account = React.lazy(() => import('./pages/Account'));
 const Permissions = React.lazy(() => import('./pages/Permissions'));
 const Settings = React.lazy(() => import('./pages/Settings'));
+const Landing = React.lazy(() => import('./pages/Landing'));
 
 // 初始化全局错误跟踪
 initializeErrorTracking();
@@ -64,6 +65,7 @@ const App: React.FC = () => {
                 <Suspense fallback={<RouteFallback />}>
                   <Routes>
                     {/* 公开路由 */}
+                    <Route path={AppRoutes.LANDING} element={<Landing />} />
                     <Route path={AppRoutes.LOGIN} element={<Login />} />
 
                     {/* 受保护的路由 */}

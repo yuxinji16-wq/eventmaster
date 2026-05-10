@@ -14,6 +14,7 @@ from app.routers.users import router as users_router
 from app.routers.roles import router as roles_router
 from app.routers.settings import router as settings_router
 from app.routers.notification import router as notification_router
+from app.routers.media import router as media_router
 
 __all__ = [
     "activity_router",
@@ -29,4 +30,5 @@ __all__ = [
     "roles_router",
     "settings_router",
     "notification_router",
+    "media_router",
 ]

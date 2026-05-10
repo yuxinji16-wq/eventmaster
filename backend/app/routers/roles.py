@@ -20,7 +20,7 @@ def require_admin(user_data: dict = Depends(get_current_user_from_token)):
     return user_data
 
 
-@router.get("/", response_model=List[RoleResponse])
+@router.get("", response_model=List[RoleResponse])
 def list_roles(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
@@ -33,7 +33,7 @@ def list_roles(
     return [RoleResponse.model_validate(r) for r in roles]
 
 
-@router.post("/", response_model=RoleResponse)
+@router.post("", response_model=RoleResponse)
 def create_role(
     role_data: RoleCreate,
     _: dict = Depends(require_admin),

@@ -16,6 +16,7 @@ class MaterialBase(BaseModel):
     usage_count: Optional[int] = 0
     last_updated: Optional[str] = None
     image_url: Optional[str] = None
+    location: Optional[str] = None
 
 
 class MaterialCreate(MaterialBase):
@@ -32,6 +33,7 @@ class MaterialUpdate(BaseModel):
     usage_count: Optional[int] = None
     last_updated: Optional[str] = None
     image_url: Optional[str] = None
+    location: Optional[str] = None
 
 
 class MaterialResponse(MaterialBase):

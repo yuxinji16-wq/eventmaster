@@ -39,6 +39,9 @@ export const AppRoutes = {
 
   // 登录
   LOGIN: '/login',
+
+  // 落地页
+  LANDING: '/landing',
 } as const;
 
 // 路由元数据（可用于权限控制、面包屑等）

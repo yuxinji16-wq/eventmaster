@@ -21,6 +21,7 @@ from app.routers import (
     roles_router,
     settings_router,
     notification_router,
+    media_router,
 )
 
 app = FastAPI(
@@ -65,6 +66,7 @@ app.include_router(users_router, prefix="/api")
 app.include_router(roles_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
 app.include_router(notification_router, prefix="/api")
+app.include_router(media_router, prefix="/api")
 
 
 @app.get("/")

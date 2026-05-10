@@ -32,6 +32,9 @@ class ActivityService(BaseService[Activity, ActivityRepository]):
 
     def create_activity(self, db: Session, data: dict) -> Activity:
         """创建活动"""
+        # 兼容处理：如果 type 为空，默认设为 selfHosted
+        if not data.get('type'):
+            data['type'] = 'selfHosted'
         return self.repository.create(db, data)
 
     def update_activity(self, db: Session, id: int, data: dict) -> Optional[Activity]:

@@ -108,11 +108,11 @@ def sample_activity_data():
 @pytest.fixture(scope="function")
 def setup_activity(client, sample_activity_data):
     """创建示例活动（供其他测试依赖）"""
-    response = client.post("/api/activities", json=sample_activity_data)
+    response = client.post("/api/activities/", json=sample_activity_data)
     if response.status_code == 200:
         return response.json()
     # 活动可能已存在，尝试获取列表中的第一个
-    list_resp = client.get("/api/activities")
+    list_resp = client.get("/api/activities/")
     if list_resp.status_code == 200 and len(list_resp.json()) > 0:
         return list_resp.json()[0]
     return None

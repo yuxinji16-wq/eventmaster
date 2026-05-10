@@ -6,11 +6,11 @@ import { Material } from '../../types';
 import { useToast } from '../../shared/Toast';
 import { AsyncState } from '../../shared/AsyncState';
 import { materialsApi } from '../../services/backendApi';
-import { 
-  Package, AlertCircle, CheckCircle2, XCircle, Search, Filter, History, Clock, 
-  Tag, ChevronDown, Plus, X, Check, Layers, Boxes, FileText, Database, 
+import {
+  Package, AlertCircle, CheckCircle2, XCircle, Search, Filter, History, Clock,
+  Tag, ChevronDown, Plus, X, Check, Layers, Boxes, FileText, Database,
   ChevronRight, ArrowLeftRight, User, MapPin, Calendar, Info, MinusCircle, ArrowUpRight,
-  ArrowLeft, ListFilter, LayoutGrid, Download, Share2
+  ArrowLeft, ListFilter, LayoutGrid, Download, Share2, Edit2
 } from 'lucide-react';
 
 const INITIAL_CATEGORIES = ['产品宣传册', '易拉宝', '会议定制', '礼品', '办公用品', '其他'];
@@ -825,13 +825,17 @@ const StatusBadge: React.FC<{status: string}> = ({status}) => {
 export const MaterialDetailView: React.FC<{
   material: Material;
   onBack: () => void;
-  onEdit?: (updated: Material) => void;
+  onEdit?: (updated: Material) => void | Promise<void>;
   warehousingLogs?: WarehousingLog[];
   withdrawalLogs?: WithdrawalLog[];
 }> = ({ material, onBack, onEdit, warehousingLogs = [], withdrawalLogs = [] }) => {
   const toast = useToast();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState(material);
+
+  useEffect(() => {
+    setEditForm(material);
+  }, [material]);
 
   // 合并并排序所有流水记录
   const allLogs = [
@@ -860,11 +864,16 @@ export const MaterialDetailView: React.FC<{
     URL.revokeObjectURL(url);
   };
 
-  const handleSaveEdit = () => {
-    if (onEdit) {
-      onEdit(editForm);
+  const handleSaveEdit = async () => {
+    try {
+      if (onEdit) {
+        await onEdit(editForm);
+      }
+      setIsEditModalOpen(false);
+      toast.success('保存成功', '物料基础规格已更新');
+    } catch (error) {
+      toast.error('保存失败', '物料基础规格未能保存，请稍后重试');
     }
-    setIsEditModalOpen(false);
   };
 
   return (
@@ -956,7 +965,19 @@ export const MaterialDetailView: React.FC<{
 
         <div className="space-y-8">
           <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100 space-y-8 h-fit">
-            <h3 className="text-lg font-black text-slate-800 tracking-tight">物料基础规格</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-black text-slate-800 tracking-tight">物料基础规格</h3>
+              <button
+                onClick={() => {
+                  setEditForm(material);
+                  setIsEditModalOpen(true);
+                }}
+                className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
+                title="编辑规格"
+              >
+                <Edit2 size={16} />
+              </button>
+            </div>
             <div className="space-y-4">
               <div className="flex gap-4">
                 <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-300"><Tag size={18} /></div>
@@ -969,7 +990,7 @@ export const MaterialDetailView: React.FC<{
                 <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-300"><MapPin size={18} /></div>
                 <div>
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">库房存放位置</p>
-                  <p className="font-bold text-slate-700">A区-04货架-2层</p>
+                  <p className="font-bold text-slate-700">{material.location || '-'}</p>
                 </div>
               </div>
               <div className="flex gap-4">
@@ -1034,6 +1055,15 @@ export const MaterialDetailView: React.FC<{
                   <option value="常规">常规备货</option>
                   <option value="定制">会议定制</option>
                 </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[11px] font-black text-slate-400 uppercase">库房存放位置</label>
+                <input
+                  value={editForm.location || ''}
+                  onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
+                  placeholder="如：A区-04货架-2层"
+                  className="w-full px-6 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl focus:border-indigo-500 outline-none font-bold text-slate-700"
+                />
               </div>
               <div className="pt-4 flex gap-4">
                 <button onClick={() => setIsEditModalOpen(false)} className="flex-1 py-3 text-sm font-black text-slate-400 bg-slate-100 rounded-xl hover:bg-slate-200 uppercase tracking-widest">取消</button>

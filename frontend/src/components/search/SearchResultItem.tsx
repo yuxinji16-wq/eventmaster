@@ -1,9 +1,11 @@
 import React from 'react';
-import { SearchResultItem, MODULE_ICONS } from './types';
+import type { SearchResultItem as SearchResultItemType } from './types';
+import { MODULE_ICONS } from './types';
+
 import { ChevronRight } from 'lucide-react';
 
 interface SearchResultItemProps {
-  item: SearchResultItem;
+  item: SearchResultItemType;
   isActive: boolean;
   onClick: () => void;
   onMouseEnter: () => void;

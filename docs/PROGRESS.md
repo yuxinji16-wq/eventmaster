@@ -143,19 +143,101 @@ frontend/src/
 
 ---
 
-## 4. 当前状态
+## 4. Phase 1 重构进度：features/activity
 
-**项目状态**: ⚠️ 功能可用 / 工程化待强化
+### 4.1 目标
+将 `ActivityDetail.tsx`（2544行）和 `ActivityManager.tsx`（2129行）拆分为 `features/activity/` 模块，建立后续模块重构模板。
+
+### 4.2 已完成
+
+| 步骤 | 内容 | 状态 |
+|------|------|------|
+| Step 1 | 创建 features/activity 目录结构 | ✅ |
+| Step 2a | 提取工具函数到 utils.ts | ✅ |
+| Step 2b | 提取 Row 组件（TaskRow, SupplierRow, MaterialRow, OpportunityRow, ExpenseRow） | ✅ |
+| Step 2c | 提取 Modal 组件（TaskModal, TaskImportModal, ExpenseModal, SupplierModal, MaterialModal, OpportunityModal） | ✅ |
+| Step 2d | 提取 Tab 组件（ProgressTab, BudgetTab, SupplierTabContent, MaterialTabContent, OpportunityTabContent） | ✅ |
+| Step 2e | 提取展示组件（StageProgressBar, RiskAlert, StatCard, StatusPanelItem） | ✅ |
+| Step 2f | 提取评价组件（ReviewTab, FeedbackCard, FeedbackModal） | ✅ |
+| Step 3a | 删除 ActivityManager.tsx 中死代码 ActivityDetailView（1214行从未使用） | ✅ |
+| Step 2g | ActivityDetailPage.tsx 主页面重构 | ✅ |
+| Step 2h | ActivityDetail.tsx 兼容 wrapper | ✅ |
+| Step 3d | ActivityListPage.tsx 主页面重构 | ✅ |
+| Step 3e | ActivityManager.tsx 兼容 wrapper | ✅ |
+| Step 5 | 全量验证 npm run build + npm test | ✅ |
+
+**Phase 1 重构已完成 ✅**
+
+**文件行数变化**:
+- `ActivityDetail.tsx`（原 pages/）: 2544 → 866 行（wrapper，-1678行）
+- `ActivityManager.tsx`（原 components/）: 2129 → 914 行（wrapper，-1215行）
+- `features/activity/pages/ActivityDetailPage.tsx`: 865 行（主页面逻辑）
+- `features/activity/pages/ActivityListPage.tsx`: 913 行（主页面逻辑）
+
+**新建文件**:
+```
+src/features/activity/
+├── utils.ts           # 7个工具函数
+├── constants.ts       # 占位
+├── types.ts          # 占位
+├── adapters.ts       # 占位
+├── components/       # 4个展示组件
+│   ├── StageProgressBar.tsx
+│   ├── RiskAlert.tsx
+│   ├── StatCard.tsx
+│   └── StatusPanelItem.tsx
+├── rows/             # 5个行组件
+│   ├── TaskRow.tsx
+│   ├── SupplierRow.tsx
+│   ├── MaterialRow.tsx
+│   ├── OpportunityRow.tsx
+│   └── ExpenseRow.tsx
+├── modals/           # 6个弹窗组件
+│   ├── TaskModal.tsx
+│   ├── TaskImportModal.tsx
+│   ├── ExpenseModal.tsx
+│   ├── SupplierModal.tsx
+│   ├── MaterialModal.tsx
+│   └── OpportunityModal.tsx
+├── detail/           # 8个 Tab 组件
+│   ├── ProgressTab.tsx
+│   ├── BudgetTab.tsx
+│   ├── SupplierTabContent.tsx
+│   ├── MaterialTabContent.tsx
+│   ├── OpportunityTabContent.tsx
+│   ├── ReviewTab.tsx
+│   ├── FeedbackCard.tsx
+│   └── FeedbackModal.tsx
+├── pages/
+│   ├── ActivityDetailPage.tsx   # 占位（Step 2g 填充）
+│   └── ActivityListPage.tsx      # 占位（Step 3e 填充）
+└── index.ts          # barrel 导出
+```
+
+### 4.3 待完成
+
+（无）
+
+### 4.4 约束
+- Phase 1 **不迁移** hooks 和 API，只拆分 UI 组件
+- 原 import 路径保持有效（通过 wrapper）
+- 每步完成后立即 `npm run build` + `npm test`
+
+---
+
+## 5. 当前状态
+
+**项目状态**: ✅ Phase 1 重构完成 / 功能可用
 
 **测试状态**:
-- 后端测试: 134 passed
-- 前端测试: 701 passed（26个测试文件）
-- 前端构建: 成功，路由拆包后无单包超过 500KB 警告
+- 后端测试: 159 passed
+- 前端测试: 798 passed（39个测试文件）
+- 前端构建: 成功
 - 前端场景测试: 283 passed（8个场景文件）
-- 前端 E2E: Playwright 1 passed（登录并访问核心业务页面）
 - BudgetManager.interaction.test.tsx 因 vitest pool 内存泄漏被排除
 
 **最近修复项**:
+- 已修复物料详情页“物料基础规格”编辑刷新丢失：物料更新 API 统一映射前端 camelCase 字段到后端 snake_case 字段，详情页保存后使用后端返回值回填页面状态
 - 已修复 `tests/test_material.py::TestMaterialAPI::test_get_low_stock_materials`
 - 处理方式：低库存查询按当前物料契约使用库存阈值，库存大于 0 且小于 10 视为低库存
 - 已启用前端 `ProtectedRoute`，受保护路由未登录时跳转 `/login`
@@ -172,7 +254,9 @@ frontend/src/
 - 已在 Dashboard/活动/物料/供应商/商机模块接入统一加载、空态、错误态展示
 - 已新增 Playwright 配置与关键路径用例：`frontend/playwright.config.ts`、`frontend/tests/e2e/core-flow.spec.ts`
 - 已补充生成物忽略规则并清理本地 `dist/test-results/playwright-report` 等目录
-- 已修复后端预算测试：sample_budget_data 移除 activity_id 避免外键约束，修复 test_budget_logs 使用错误的 activity_id 参数
+- 已修复后端路由尾部斜杠问题：users/settings/roles 路由 `@router.get("/")` → `@router.get("")`，修复 404 错误
+- 已修复 conftest.py 的 setup_activity fixture：POST/GET `/api/activities` → `/api/activities/`，修复 review 模块测试 400/500 错误
+- 已完成 Phase 1 重构：ActivityDetailPage/ActivityListPage 主页面逻辑 + 兼容 wrapper，build 和全部测试通过
 - 已修复前端测试中的 Label 引用：Login.tsx 添加 htmlFor/id，Account.tsx 添加 htmlFor/id/aria-label/data-testid
 - 已建立前端全面测试体系：701个测试用例覆盖 Login、Account、Dashboard、ActivityManager、MaterialManager、SupplierManager、OpportunityManager、ReviewList、AddFeedbackModal、YearlyDashboard、Sidebar 等组件
 - 已建立场景测试体系：283个场景测试用例覆盖 8个业务场景（auth、activity、material、budget、supplier、review、dashboard、opportunity）
@@ -186,7 +270,7 @@ frontend/src/
 
 ---
 
-## 5. 风险登记
+## 6. 风险登记
 
 | 风险 | 影响 | 状态 | 应对 |
 |------|------|------|------|
@@ -290,3 +374,32 @@ frontend/src/
 | `frontend/src/constants/index.tsx` | 大规模删除改动，风险较高，需单独确认 |
 
 结论：后续提交建议至少拆成三组：工程化文档与配置、低库存修复、历史业务/任务模块改动。
+
+---
+
+## 9. 代码级成熟度评估更新（2026-05-10）
+
+### 9.1 最新评估结果
+
+- 成熟度：`72/100`
+- 完成度：`80/100`
+- 评估方式：仅基于代码与配置文件，不采信文档自述结果。
+
+### 9.2 当前阻断项
+
+1. `P0` 安全与契约
+- 业务路由鉴权覆盖不完整。
+- 默认管理员初始化策略存在风险。
+- 前端直连 Gemini key 需改后端代理。
+- `fileApi` 前后端契约未完全对齐。
+
+2. `P1` 工程化
+- 缺少 Alembic 迁移链路。
+- E2E 覆盖不够宽。
+- 可观测性停留在日志层。
+
+### 9.3 下一里程碑
+
+- M13（目标日期：2026-06-30）：完成全部 P0 任务并回归通过。
+- M14（目标日期：2026-08-15）：完成 P1 工程化基线（迁移、CI、基础观测）。
+- M15（目标日期：2026-09-30）：完成 P2 扩展性改造（数据库与性能治理）。

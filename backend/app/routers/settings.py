@@ -22,7 +22,7 @@ def require_admin(user_data: dict = Depends(get_current_user_from_token)):
     return user_data
 
 
-@router.get("/", response_model=SiteSettingsResponse)
+@router.get("", response_model=SiteSettingsResponse)
 def get_settings(
     _: dict = Depends(require_admin),
     db: Session = Depends(get_db)
@@ -33,7 +33,7 @@ def get_settings(
     return SiteSettingsResponse.model_validate(settings)
 
 
-@router.put("/", response_model=SiteSettingsResponse)
+@router.put("", response_model=SiteSettingsResponse)
 def update_settings(
     settings_data: SiteSettingsUpdate,
     _: dict = Depends(require_admin),

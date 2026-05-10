@@ -30,7 +30,7 @@ eventmaster-pro/
 
 | 端 | 技术 |
 |---|---|
-| 前端 | React + TypeScript + Tailwind CSS + Vite + React Router v6 |
+| 前端 | React + TypeScript + Tailwind CSS + Vite + React Router |
 | 后端 | FastAPI + SQLAlchemy + SQLite |
 | 认证 | JWT (HS256) + bcrypt 密码哈希 |
 | AI | Google Gemini API |
@@ -102,3 +102,5 @@ CORS_ORIGINS=["http://your-production-domain.com"]
 - [需求规格](docs/SPEC.md)
 - [设计文档](docs/DESIGN.md)
 - [进度追踪](docs/PROGRESS.md)
+- [工程化计划](docs/ENGINEERING.md)
+- [任务清单](docs/TASKS.md)

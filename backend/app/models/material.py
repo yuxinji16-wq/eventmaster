@@ -19,6 +19,7 @@ class Material(Base, TimestampMixin):
     usage_count = Column(Integer, default=0)  # 使用次数
     last_updated = Column(String(20))  # 最后更新时间
     image_url = Column(String(500))  # 物料图片
+    location = Column(String(200))  # 库房存放位置
 
 
 class WarehousingLog(Base, TimestampMixin):

@@ -81,10 +81,11 @@ const MaterialDetail: React.FC = () => {
   const handleEdit = async (updated: Material) => {
     if (!material) return;
     try {
-      await materialsApi.update(parseInt(material.id), updated as any);
-      setMaterial(updated);
+      const saved = await materialsApi.update(parseInt(material.id), updated as any);
+      setMaterial(adaptMaterial(saved));
     } catch (error) {
       console.error('Failed to update material:', error);
+      throw error;
     }
   };
 

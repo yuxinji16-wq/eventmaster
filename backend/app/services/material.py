@@ -46,13 +46,16 @@ class WarehousingLogService(BaseService[WarehousingLog, WarehousingLogRepository
         """创建入库记录并更新库存"""
         # 兼容前端字段名
         quantity = data.get("quantity", data.get("count", 0))
-        log = self.repository.create(db, data)
-        # 更新库存
+        # 填充物料名称（如果未提供）
         material_repo = MaterialRepository()
         material = material_repo.get(db, data["material_id"])
         if material:
+            if not data.get("material_name"):
+                data["material_name"] = material.name
             material.stock += quantity
             db.commit()
+        log = self.repository.create(db, data)
+        db.refresh(log)
         return log
 
 
@@ -93,11 +96,16 @@ class WithdrawalLogService(BaseService[WithdrawalLog, WithdrawalLogRepository]):
         """创建出库记录并更新库存"""
         # 兼容前端字段名
         quantity = data.get("quantity", data.get("count", 0))
-        log = self.repository.create(db, data)
-        # 更新库存
+        # 填充物料名称和单位（如果未提供）
         material_repo = MaterialRepository()
         material = material_repo.get(db, data["material_id"])
         if material:
+            if not data.get("material_name"):
+                data["material_name"] = material.name
+            if not data.get("unit"):
+                data["unit"] = material.unit
             material.stock -= quantity
             db.commit()
+        log = self.repository.create(db, data)
+        db.refresh(log)
         return log

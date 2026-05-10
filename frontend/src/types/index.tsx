@@ -101,7 +101,105 @@ export interface Activity {
   currentStage?: ActivityStage;
   // 复盘数据
   reviewData?: ReviewData;
+  // 外部活动信息（当 activity.type === 'external' 时使用）
+  externalEventInfo?: ExternalEventInfo;
 }
+
+// ============ 外部活动类型定义 ============
+
+export type DriverType = '主动规划型' | '客户驱动型' | '领导推动型' | '机会触发型' | '被动承接型';
+export type ParticipationStrategy = '重点投入' | '标准参与' | '低成本调研';
+export type ParticipationForm = '展位' | '演讲' | '展位+演讲' | '普通参会' | '其他';
+export type SelfAssessment = '超预期' | '基本达成' | '未达预期';
+export type ValueAssessment = '高价值' | '中等价值' | '低价值' | '无效投入';
+export type NextYearSuggestion = '升级参与' | '维持参与' | '降级参与' | '不再参与';
+export type GoalOption = '客户拓展' | '品牌曝光' | '行业调研' | '生态合作' | '其他';
+export type PremiumResource = '深度对接机会' | '媒体采访机会' | '行业报告/白皮书' | '参会名单' | '合作伙伴资源' | '奖项/标准/官方背书' | '其他';
+
+export interface ExternalEventInfo {
+  decision: {
+    goals: GoalOption[];
+    driverType: DriverType | '';
+    participationStrategy: ParticipationStrategy | '';
+    decisionNote: string;
+  };
+  execution: {
+    participationForm: ParticipationForm[];
+    attendees: string[];
+    displayContent: string;
+    resourceSupport: string[];
+  };
+  resources: {
+    leadsCount: number;
+    highValueLeadsCount: number;
+    transferredLeadsCount: number;
+    convertedLeadsCount: number;
+    premiumResources: PremiumResource[];
+    competitorObservation: string;
+    industryObservation: string;
+  };
+  cost: {
+    participationFee: number;
+    materialFee: number;
+    otherFee: number;
+    totalCost: number;
+    overBudget: boolean;
+  };
+  evaluation: {
+    selfAssessment: SelfAssessment | '';
+    valueAssessment: ValueAssessment | '';
+    continueNextYear: string;
+    nextYearSuggestion: NextYearSuggestion | '';
+    conclusion: string;
+  };
+  oaLinks: {
+    applicationUrl: string;
+    feedbackUrl: string;
+  };
+}
+
+// 创建默认外部活动信息
+export const createDefaultExternalEventInfo = (): ExternalEventInfo => ({
+  decision: {
+    goals: [],
+    driverType: '',
+    participationStrategy: '',
+    decisionNote: '',
+  },
+  execution: {
+    participationForm: [],
+    attendees: [],
+    displayContent: '',
+    resourceSupport: [],
+  },
+  resources: {
+    leadsCount: 0,
+    highValueLeadsCount: 0,
+    transferredLeadsCount: 0,
+    convertedLeadsCount: 0,
+    premiumResources: [],
+    competitorObservation: '',
+    industryObservation: '',
+  },
+  cost: {
+    participationFee: 0,
+    materialFee: 0,
+    otherFee: 0,
+    totalCost: 0,
+    overBudget: false,
+  },
+  evaluation: {
+    selfAssessment: '',
+    valueAssessment: '',
+    continueNextYear: '',
+    nextYearSuggestion: '',
+    conclusion: '',
+  },
+  oaLinks: {
+    applicationUrl: '',
+    feedbackUrl: '',
+  },
+});
 
 // 活动复盘数据（本地管理）
 export interface ReviewData {
@@ -132,6 +230,7 @@ export interface Material {
   usageCount: number;
   lastUpdated: string;
   imageUrl?: string;
+  location?: string;
   created_at?: string;
 }
 

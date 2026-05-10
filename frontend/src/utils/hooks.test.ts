@@ -87,6 +87,7 @@ describe('API 类型适配器', () => {
       status: 'In Stock',
       usage_count: 50,
       last_updated: '2026-03-20T12:00:00Z',
+      location: 'A区-04货架-2层',
       created_at: '2026-01-01T00:00:00Z',
     };
 
@@ -100,6 +101,7 @@ describe('API 类型适配器', () => {
         stock: 100,
         status: 'In Stock',
         usageCount: 50,
+        location: 'A区-04货架-2层',
       });
     });
 

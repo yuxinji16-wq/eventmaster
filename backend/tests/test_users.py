@@ -24,6 +24,7 @@ def admin_token(client: TestClient, db_session: Session) -> str:
     user.is_superadmin = True
     db_session.commit()
 
+    # 注意：必须在 is_superadmin 设置后重新登录，以获取包含正确权限的 token
     login_response = client.post("/api/auth/login", json={
         "username": "adminfortest",
         "password": TEST_PASSWORD_STRONG

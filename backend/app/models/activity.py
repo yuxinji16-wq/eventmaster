@@ -1,7 +1,7 @@
 """
 活动模型
 """
-from sqlalchemy import Column, String, Float, Integer, Text
+from sqlalchemy import Column, String, Float, Integer, Text, JSON
 from app.db.base import Base, TimestampMixin
 
 
@@ -13,7 +13,7 @@ class Activity(Base, TimestampMixin):
     date = Column(String(20), nullable=False)
     year = Column(String(4), nullable=False, index=True)
     location = Column(String(200))
-    type = Column(String(50))  # Exhibition, Conference, Webinar, Roadshow
+    type = Column(String(50))  # selfHosted=自办活动, external=外部市场活动
     category = Column(String(50))  # 自办活动, 外部市场活动
     industry = Column(String(100))
     budget = Column(Float, default=0)
@@ -21,3 +21,4 @@ class Activity(Base, TimestampMixin):
     leads = Column(Integer, default=0)
     status = Column(String(20), default="待启动")  # 待启动, 进行中, 已完成, 已取消
     description = Column(Text)
+    external_event_info = Column(JSON, nullable=True)  # 外部活动详细信息

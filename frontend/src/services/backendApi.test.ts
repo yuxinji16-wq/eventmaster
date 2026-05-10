@@ -28,7 +28,7 @@ describe('backendApi 查询参数契约', () => {
 
     const [url] = vi.mocked(fetch).mock.calls[0];
     expect(String(url)).toBe(
-      'http://localhost:8001/api/activities?year=2026&status=%E8%BF%9B%E8%A1%8C%E4%B8%AD&keyword=%E5%8F%91%E5%B8%83%E4%BC%9A'
+      'http://localhost:8001/api/activities/?year=2026&status=%E8%BF%9B%E8%A1%8C%E4%B8%AD&keyword=%E5%8F%91%E5%B8%83%E4%BC%9A'
     );
   });
 
@@ -46,8 +46,31 @@ describe('backendApi 查询参数契约', () => {
 
     const [url] = vi.mocked(fetch).mock.calls[0];
     expect(String(url)).toBe(
-      'http://localhost:8001/api/materials?keyword=%E5%B1%95%E6%9E%B6'
+      'http://localhost:8001/api/materials/?keyword=%E5%B1%95%E6%9E%B6'
     );
+  });
+
+  it('materialsApi.update 将物料详情前端字段映射为后端字段', async () => {
+    await materialsApi.update(7, {
+      name: '产品手册',
+      type: '定制',
+      location: 'A区-04货架-2层',
+      usageCount: 12,
+      lastUpdated: '2026-04-23T10:00:00Z',
+      imageUrl: 'https://example.com/material.png',
+    });
+
+    const [url, options] = vi.mocked(fetch).mock.calls[0];
+    expect(String(url)).toBe('http://localhost:8001/api/materials/7');
+    expect(options?.method).toBe('PUT');
+    expect(JSON.parse(String(options?.body))).toEqual({
+      name: '产品手册',
+      type: '定制',
+      location: 'A区-04货架-2层',
+      usage_count: 12,
+      last_updated: '2026-04-23T10:00:00Z',
+      image_url: 'https://example.com/material.png',
+    });
   });
 
   it('suppliersApi.getList 将 search 映射为后端 keyword', async () => {
@@ -55,7 +78,7 @@ describe('backendApi 查询参数契约', () => {
 
     const [url] = vi.mocked(fetch).mock.calls[0];
     expect(String(url)).toBe(
-      'http://localhost:8001/api/suppliers?category=%E6%90%AD%E5%BB%BA&keyword=%E4%B8%8A%E6%B5%B7'
+      'http://localhost:8001/api/suppliers/?category=%E6%90%AD%E5%BB%BA&keyword=%E4%B8%8A%E6%B5%B7'
     );
   });
 
@@ -64,7 +87,7 @@ describe('backendApi 查询参数契约', () => {
 
     const [url] = vi.mocked(fetch).mock.calls[0];
     expect(String(url)).toBe(
-      'http://localhost:8001/api/opportunities?status=%E9%AB%98%E6%84%8F%E5%90%91&activity_id=12&keyword=%E5%8D%8E%E4%B8%9C'
+      'http://localhost:8001/api/opportunities/?status=%E9%AB%98%E6%84%8F%E5%90%91&activity_id=12&keyword=%E5%8D%8E%E4%B8%9C'
     );
   });
 
@@ -72,6 +95,6 @@ describe('backendApi 查询参数契约', () => {
     await opportunitiesApi.getList();
 
     const [url] = vi.mocked(fetch).mock.calls[0];
-    expect(String(url)).toBe('http://localhost:8001/api/opportunities');
+    expect(String(url)).toBe('http://localhost:8001/api/opportunities/');
   });
 });

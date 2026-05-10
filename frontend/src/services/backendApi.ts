@@ -22,6 +22,8 @@ export interface ApiActivity {
   description?: string;
   created_at: string;
   updated_at: string;
+  // 外部活动信息
+  external_event_info?: any;
 }
 
 export interface ApiMaterial {
@@ -35,8 +37,15 @@ export interface ApiMaterial {
   usage_count: number;
   last_updated: string;
   image_url?: string;
+  location?: string;
   created_at: string;
 }
+
+type MaterialPayload = Partial<ApiMaterial> & {
+  usageCount?: number;
+  lastUpdated?: string;
+  imageUrl?: string;
+};
 
 export interface ApiSupplier {
   id: number;
@@ -188,7 +197,7 @@ export interface ApiBudgetOverview {
 
 // ============ API Client ============
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8002/api').replace(/\/$/, '');
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001/api').replace(/\/$/, '');
 const DEFAULT_TIMEOUT = 30000; // 30秒超时
 const MAX_RETRIES = 3;
 
@@ -429,7 +438,7 @@ export const budgetApi = {
     request<ApiActivity[] | { activities: ApiActivity[]; total: number }>(`/budget/activities?year=${year}`),
   getLogs: (activityId: number) => request<ApiBudgetLog[]>(`/budget/logs?activity_id=${activityId}`),
   createLog: (data: Partial<ApiBudgetLog>) =>
-    request<ApiBudgetLog>('/budget/logs/', {
+    request<ApiBudgetLog>('/budget/logs', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
@@ -462,11 +471,27 @@ export const materialsApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  update: (id: number, data: Partial<ApiMaterial>) =>
-    request<ApiMaterial>(`/materials/${id}`, {
+  update: (id: number, data: MaterialPayload) => {
+    const payload: Record<string, unknown> = { ...data };
+
+    if (data.usageCount !== undefined) {
+      payload.usage_count = data.usageCount;
+      delete payload.usageCount;
+    }
+    if (data.lastUpdated !== undefined) {
+      payload.last_updated = data.lastUpdated;
+      delete payload.lastUpdated;
+    }
+    if (data.imageUrl !== undefined) {
+      payload.image_url = data.imageUrl;
+      delete payload.imageUrl;
+    }
+
+    return request<ApiMaterial>(`/materials/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(data),
-    }),
+      body: JSON.stringify(payload),
+    });
+  },
   delete: (id: number) => request<{ message: string }>(`/materials/${id}`, {
     method: 'DELETE',
   }),
@@ -746,6 +771,170 @@ export const reviewsApi = {
     ),
 };
 
+// ============ 媒体与传播 API 类型 ============
+
+export interface ApiMediaRecord {
+  id: number;
+  activity_id: number;
+  name: string;
+  category: string;  // media_coop=媒体合作, content_pub=内容发布
+  media_type: string;  // interview=采访, press_release=通稿, video=视频, wechat=公众号, video_content=视频内容, social=小红书/微博
+  media_level?: string;  // central=央级, industry=行业, local=地方
+  has_interview: string;
+  has_published: string;
+  has_video_interview: string;
+  channel?: string;
+  url?: string;
+  publish_date?: string;
+  views: number;
+  interactions: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  is_key_media: string;
+  notes?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface ApiPremiumResource {
+  id: number;
+  activity_id: number;
+  has_official_interview: string;
+  has_industry_coverage: string;
+  has_award_participation: string;
+  has_contact_list: string;
+  has_whitepaper: string;
+  interview_details?: string;
+  coverage_details?: string;
+  award_details?: string;
+  contact_list_details?: string;
+  whitepaper_details?: string;
+  notes?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface ApiMediaStats {
+  activity_id: number;
+  total_media_count: number;
+  total_content_count: number;
+  total_record_count: number;
+  total_views: number;
+  total_interactions: number;
+  total_likes: number;
+  total_comments: number;
+  total_shares: number;
+  key_media_count: number;
+  effectiveness_score: number;
+  premium_has_official_interview: string;
+  premium_has_industry_coverage: string;
+  premium_has_award_participation: string;
+  premium_has_contact_list: string;
+  premium_has_whitepaper: string;
+}
+
+export interface ApiMediaStatsResponse {
+  stats: ApiMediaStats;
+  media_records: ApiMediaRecord[];
+  premium_resource: ApiPremiumResource | null;
+}
+
+// ============ 媒体与传播 API ============
+
+export const mediaApi = {
+  // 获取活动的媒体统计汇总
+  getStats: (activityId: number) =>
+    request<ApiMediaStatsResponse>(`/media/activity/${activityId}/stats`),
+
+  // 获取活动的媒体记录列表
+  getRecords: (activityId: number, params?: { category?: string }) => {
+    const query = buildQuery(params);
+    return request<ApiMediaRecord[]>(withQuery(`/media/activity/${activityId}`, query));
+  },
+
+  // 获取单个媒体记录
+  getRecord: (mediaId: number) =>
+    request<ApiMediaRecord>(`/media/${mediaId}`),
+
+  // 创建媒体记录
+  createRecord: (data: Partial<ApiMediaRecord>) =>
+    request<ApiMediaRecord>('/media/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // 更新媒体记录
+  updateRecord: (mediaId: number, data: Partial<ApiMediaRecord>) =>
+    request<ApiMediaRecord>(`/media/${mediaId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  // 删除媒体记录
+  deleteRecord: (mediaId: number) =>
+    request<{ message: string }>(`/media/${mediaId}`, {
+      method: 'DELETE',
+    }),
+
+  // 获取溢价资源
+  getPremiumResource: (activityId: number) =>
+    request<ApiPremiumResource>(`/media/premium/activity/${activityId}`),
+
+  // 创建/更新溢价资源
+  savePremiumResource: (data: Partial<ApiPremiumResource>) =>
+    request<ApiPremiumResource>('/media/premium', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // 更新溢价资源
+  updatePremiumResource: (activityId: number, data: Partial<ApiPremiumResource>) =>
+    request<ApiPremiumResource>(`/media/premium/activity/${activityId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+};
+
+// ============ 文件管理 API ================
+
+export interface ApiActivityFile {
+  id: string;
+  activity_id: string;
+  name: string;
+  type: string;
+  size: number;
+  storage_key: string;
+  upload_time: string;
+  description?: string;
+}
+
+export const fileApi = {
+  // 获取活动的所有文件
+  getFiles: (activityId: string) =>
+    request<ApiActivityFile[]>(`/files/activity/${activityId}`),
+
+  // 上传文件元数据
+  upload: (data: ApiActivityFile) =>
+    request<ApiActivityFile>('/files/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // 删除文件
+  delete: (fileId: string) =>
+    request<{ message: string }>(`/files/${fileId}`, {
+      method: 'DELETE',
+    }),
+
+  // 重命名文件
+  rename: (fileId: string, newName: string) =>
+    request<ApiActivityFile>(`/files/${fileId}/rename`, {
+      method: 'PUT',
+      body: JSON.stringify({ name: newName }),
+    }),
+};
+
 export default {
   dashboard: dashboardApi,
   activities: activitiesApi,
@@ -755,4 +944,6 @@ export default {
   suppliers: suppliersApi,
   opportunities: opportunitiesApi,
   reviews: reviewsApi,
+  media: mediaApi,
+  files: fileApi,
 };

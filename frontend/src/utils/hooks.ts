@@ -5,17 +5,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   activitiesApi, materialsApi, suppliersApi,
-  opportunitiesApi, budgetApi, reviewsApi,
+  opportunitiesApi, budgetApi, reviewsApi, mediaApi,
   ApiActivity, ApiMaterial,
   ApiSupplier, ApiOpportunity,
   ApiBudgetLog,
   ApiReview, ApiReviewFeedback, ApiReviewConclusion,
-  ApiReviewAvgScores, ApiGenerateSummaryResponse
+  ApiReviewAvgScores, ApiGenerateSummaryResponse,
+  ApiMediaRecord, ApiPremiumResource, ApiMediaStatsResponse
 } from '../services/backendApi';
 import {
   Activity, Material, Supplier, Opportunity, BudgetLog,
   ActivityStatus, BudgetStatus
 } from '../types';
+import { fileStorage } from '../services/fileStorage';
 
 /**
  * 安全解析字符串 ID 为数字
@@ -64,6 +66,8 @@ export function adaptActivity(apiActivity: ApiActivity): Activity {
     leads: apiActivity.leads,
     status: (apiActivity.status || '待启动') as ActivityStatus,
     description: apiActivity.description || '',
+    // 外部活动信息
+    externalEventInfo: apiActivity.external_event_info,
   };
 }
 
@@ -84,6 +88,7 @@ export function adaptMaterial(apiMaterial: ApiMaterial): Material {
     usageCount: apiMaterial.usage_count || 0,
     lastUpdated: apiMaterial.last_updated || new Date().toISOString(),
     imageUrl: apiMaterial.image_url,
+    location: apiMaterial.location,
   };
 }
 
@@ -195,7 +200,7 @@ export function useActivitiesData() {
         date: data.date || '',
         year: data.year || new Date().getFullYear().toString(),
         location: data.location,
-        type: data.type || 'Conference',
+        type: data.type || 'selfHosted',  // 默认自办活动
         category: data.category || '自办活动',
         industry: data.industry,
         budget: data.budget || 0,
@@ -229,6 +234,8 @@ export function useActivitiesData() {
       if (data.leads !== undefined) apiData.leads = data.leads;
       if (data.status !== undefined) apiData.status = data.status;
       if (data.description !== undefined) apiData.description = data.description;
+      // 外部活动信息
+      if (data.externalEventInfo !== undefined) apiData.external_event_info = data.externalEventInfo;
 
       const updated = await activitiesApi.update(id, apiData);
       const adapted = adaptActivity(updated);
@@ -297,6 +304,7 @@ export function useMaterialsData() {
         stock: data.stock || 0,
         unit: data.unit || '个',
         image_url: data.imageUrl,
+        location: data.location,
         status: data.status || 'In Stock',
         usage_count: data.usageCount || 0,
         last_updated: data.lastUpdated || new Date().toISOString(),
@@ -319,6 +327,7 @@ export function useMaterialsData() {
       if (data.type !== undefined) apiData.type = data.type;
       if (data.stock !== undefined) apiData.stock = data.stock;
       if (data.unit !== undefined) apiData.unit = data.unit;
+      if (data.location !== undefined) apiData.location = data.location;
       if (data.imageUrl !== undefined) apiData.image_url = data.imageUrl;
       if (data.usageCount !== undefined) apiData.usage_count = data.usageCount;
       if (data.lastUpdated !== undefined) apiData.last_updated = data.lastUpdated;
@@ -1412,4 +1421,466 @@ export function getAllLeads(): Opportunity[] {
 
 export function clearAllLeads(): void {
   console.warn('clearAllLeads is deprecated, use opportunitiesApi instead');
+}
+
+// ============ 媒体与传播 Hook ============
+
+export interface MediaRecord {
+  id: string;
+  activityId: number;
+  name: string;
+  category: 'media_coop' | 'content_pub';
+  mediaType: string;
+  mediaLevel?: string;
+  hasInterview: boolean;
+  hasPublished: boolean;
+  hasVideoInterview: boolean;
+  channel?: string;
+  url?: string;
+  publishDate?: string;
+  views: number;
+  interactions: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  isKeyMedia: boolean;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface PremiumResource {
+  id: string;
+  activityId: number;
+  hasOfficialInterview: boolean;
+  hasIndustryCoverage: boolean;
+  hasAwardParticipation: boolean;
+  hasContactList: boolean;
+  hasWhitepaper: boolean;
+  interviewDetails?: string;
+  coverageDetails?: string;
+  awardDetails?: string;
+  contactListDetails?: string;
+  whitepaperDetails?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface MediaStats {
+  activityId: number;
+  totalMediaCount: number;
+  totalContentCount: number;
+  totalRecordCount: number;
+  totalViews: number;
+  totalInteractions: number;
+  totalLikes: number;
+  totalComments: number;
+  totalShares: number;
+  keyMediaCount: number;
+  effectivenessScore: number;
+  premiumHasOfficialInterview: boolean;
+  premiumHasIndustryCoverage: boolean;
+  premiumHasAwardParticipation: boolean;
+  premiumHasContactList: boolean;
+  premiumHasWhitepaper: boolean;
+}
+
+// API -> 前端类型适配器
+function adaptMediaRecord(api: ApiMediaRecord): MediaRecord {
+  return {
+    id: String(api.id),
+    activityId: api.activity_id,
+    name: api.name,
+    category: api.category as 'media_coop' | 'content_pub',
+    mediaType: api.media_type,
+    mediaLevel: api.media_level,
+    hasInterview: api.has_interview === '是',
+    hasPublished: api.has_published === '是',
+    hasVideoInterview: api.has_video_interview === '是',
+    channel: api.channel,
+    url: api.url,
+    publishDate: api.publish_date,
+    views: api.views || 0,
+    interactions: api.interactions || 0,
+    likes: api.likes || 0,
+    comments: api.comments || 0,
+    shares: api.shares || 0,
+    isKeyMedia: api.is_key_media === '是',
+    notes: api.notes,
+    createdAt: api.created_at,
+    updatedAt: api.updated_at,
+  };
+}
+
+function adaptPremiumResource(api: ApiPremiumResource): PremiumResource {
+  return {
+    id: String(api.id),
+    activityId: api.activity_id,
+    hasOfficialInterview: api.has_official_interview === '是',
+    hasIndustryCoverage: api.has_industry_coverage === '是',
+    hasAwardParticipation: api.has_award_participation === '是',
+    hasContactList: api.has_contact_list === '是',
+    hasWhitepaper: api.has_whitepaper === '是',
+    interviewDetails: api.interview_details,
+    coverageDetails: api.coverage_details,
+    awardDetails: api.award_details,
+    contactListDetails: api.contact_list_details,
+    whitepaperDetails: api.whitepaper_details,
+    notes: api.notes,
+    createdAt: api.created_at,
+    updatedAt: api.updated_at,
+  };
+}
+
+function adaptMediaStats(api: ApiMediaStats): MediaStats {
+  return {
+    activityId: api.activity_id,
+    totalMediaCount: api.total_media_count || 0,
+    totalContentCount: api.total_content_count || 0,
+    totalRecordCount: api.total_record_count || 0,
+    totalViews: api.total_views || 0,
+    totalInteractions: api.total_interactions || 0,
+    totalLikes: api.total_likes || 0,
+    totalComments: api.total_comments || 0,
+    totalShares: api.total_shares || 0,
+    keyMediaCount: api.key_media_count || 0,
+    effectivenessScore: api.effectiveness_score || 0,
+    premiumHasOfficialInterview: api.premium_has_official_interview === '是',
+    premiumHasIndustryCoverage: api.premium_has_industry_coverage === '是',
+    premiumHasAwardParticipation: api.premium_has_award_participation === '是',
+    premiumHasContactList: api.premium_has_contact_list === '是',
+    premiumHasWhitepaper: api.premium_has_whitepaper === '是',
+  };
+}
+
+/**
+ * 媒体与传播数据 Hook
+ * 用于活动详情页的媒体与传播管理
+ */
+export function useMediaData(activityId: string) {
+  const [stats, setStats] = useState<MediaStats | null>(null);
+  const [mediaRecords, setMediaRecords] = useState<MediaRecord[]>([]);
+  const [premiumResource, setPremiumResource] = useState<PremiumResource | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const numericActivityId = tryParseId(activityId);
+
+  // 加载媒体数据
+  const loadMediaData = useCallback(async () => {
+    if (!numericActivityId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await mediaApi.getStats(numericActivityId) as ApiMediaStatsResponse;
+      setStats(adaptMediaStats(data.stats));
+      setMediaRecords(data.media_records.map(adaptMediaRecord));
+      setPremiumResource(data.premium_resource ? adaptPremiumResource(data.premium_resource) : null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载媒体数据失败');
+      console.error('Failed to fetch media data:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [numericActivityId]);
+
+  useEffect(() => {
+    if (numericActivityId) {
+      loadMediaData();
+    }
+  }, [numericActivityId, loadMediaData]);
+
+  // 创建媒体记录
+  const createMediaRecord = useCallback(async (data: {
+    name: string;
+    category: 'media_coop' | 'content_pub';
+    mediaType: string;
+    mediaLevel?: string;
+    hasInterview?: boolean;
+    hasPublished?: boolean;
+    hasVideoInterview?: boolean;
+    channel?: string;
+    url?: string;
+    publishDate?: string;
+    views?: number;
+    interactions?: number;
+    likes?: number;
+    comments?: number;
+    shares?: number;
+    isKeyMedia?: boolean;
+    notes?: string;
+  }) => {
+    if (!numericActivityId) return null;
+    try {
+      const apiData = {
+        activity_id: numericActivityId,
+        name: data.name,
+        category: data.category,
+        media_type: data.mediaType,
+        media_level: data.mediaLevel,
+        has_interview: data.hasInterview ? '是' : '否',
+        has_published: data.hasPublished ? '是' : '否',
+        has_video_interview: data.hasVideoInterview ? '是' : '否',
+        channel: data.channel,
+        url: data.url,
+        publish_date: data.publishDate,
+        views: data.views || 0,
+        interactions: data.interactions || 0,
+        likes: data.likes || 0,
+        comments: data.comments || 0,
+        shares: data.shares || 0,
+        is_key_media: data.isKeyMedia ? '是' : '否',
+        notes: data.notes,
+      };
+      const newRecord = await mediaApi.createRecord(apiData);
+      const adapted = adaptMediaRecord(newRecord);
+      setMediaRecords(prev => [adapted, ...prev]);
+      // 刷新统计
+      await loadMediaData();
+      return adapted;
+    } catch (err) {
+      console.error('Failed to create media record:', err);
+      throw err;
+    }
+  }, [numericActivityId, loadMediaData]);
+
+  // 更新媒体记录
+  const updateMediaRecord = useCallback(async (mediaId: number, data: Partial<MediaRecord>) => {
+    try {
+      const apiData: Record<string, unknown> = {};
+      if (data.name !== undefined) apiData.name = data.name;
+      if (data.category !== undefined) apiData.category = data.category;
+      if (data.mediaType !== undefined) apiData.media_type = data.mediaType;
+      if (data.mediaLevel !== undefined) apiData.media_level = data.mediaLevel;
+      if (data.hasInterview !== undefined) apiData.has_interview = data.hasInterview ? '是' : '否';
+      if (data.hasPublished !== undefined) apiData.has_published = data.hasPublished ? '是' : '否';
+      if (data.hasVideoInterview !== undefined) apiData.has_video_interview = data.hasVideoInterview ? '是' : '否';
+      if (data.channel !== undefined) apiData.channel = data.channel;
+      if (data.url !== undefined) apiData.url = data.url;
+      if (data.publishDate !== undefined) apiData.publish_date = data.publishDate;
+      if (data.views !== undefined) apiData.views = data.views;
+      if (data.interactions !== undefined) apiData.interactions = data.interactions;
+      if (data.likes !== undefined) apiData.likes = data.likes;
+      if (data.comments !== undefined) apiData.comments = data.comments;
+      if (data.shares !== undefined) apiData.shares = data.shares;
+      if (data.isKeyMedia !== undefined) apiData.is_key_media = data.isKeyMedia ? '是' : '否';
+      if (data.notes !== undefined) apiData.notes = data.notes;
+
+      const updated = await mediaApi.updateRecord(mediaId, apiData);
+      const adapted = adaptMediaRecord(updated);
+      setMediaRecords(prev => prev.map(r => r.id === String(mediaId) ? adapted : r));
+      // 刷新统计
+      await loadMediaData();
+      return adapted;
+    } catch (err) {
+      console.error('Failed to update media record:', err);
+      throw err;
+    }
+  }, [loadMediaData]);
+
+  // 删除媒体记录
+  const deleteMediaRecord = useCallback(async (mediaId: number) => {
+    try {
+      await mediaApi.deleteRecord(mediaId);
+      setMediaRecords(prev => prev.filter(r => r.id !== String(mediaId)));
+      // 刷新统计
+      await loadMediaData();
+    } catch (err) {
+      console.error('Failed to delete media record:', err);
+      throw err;
+    }
+  }, [loadMediaData]);
+
+  // 更新溢价资源
+  const updatePremiumResource = useCallback(async (data: Partial<PremiumResource>) => {
+    if (!numericActivityId) return null;
+    try {
+      const apiData: Record<string, unknown> = {
+        activity_id: numericActivityId,
+      };
+      if (data.hasOfficialInterview !== undefined) apiData.has_official_interview = data.hasOfficialInterview ? '是' : '否';
+      if (data.hasIndustryCoverage !== undefined) apiData.has_industry_coverage = data.hasIndustryCoverage ? '是' : '否';
+      if (data.hasAwardParticipation !== undefined) apiData.has_award_participation = data.hasAwardParticipation ? '是' : '否';
+      if (data.hasContactList !== undefined) apiData.has_contact_list = data.hasContactList ? '是' : '否';
+      if (data.hasWhitepaper !== undefined) apiData.has_whitepaper = data.hasWhitepaper ? '是' : '否';
+      if (data.interviewDetails !== undefined) apiData.interview_details = data.interviewDetails;
+      if (data.coverageDetails !== undefined) apiData.coverage_details = data.coverageDetails;
+      if (data.awardDetails !== undefined) apiData.award_details = data.awardDetails;
+      if (data.contactListDetails !== undefined) apiData.contact_list_details = data.contactListDetails;
+      if (data.whitepaperDetails !== undefined) apiData.whitepaper_details = data.whitepaperDetails;
+      if (data.notes !== undefined) apiData.notes = data.notes;
+
+      // 使用 POST 创建或更新
+      const updated = await mediaApi.savePremiumResource(apiData);
+      const adapted = adaptPremiumResource(updated);
+      setPremiumResource(adapted);
+      // 刷新统计
+      await loadMediaData();
+      return adapted;
+    } catch (err) {
+      console.error('Failed to update premium resource:', err);
+      throw err;
+    }
+  }, [numericActivityId, loadMediaData]);
+
+  return {
+    stats,
+    mediaRecords,
+    premiumResource,
+    loading,
+    error,
+    loadMediaData,
+    createMediaRecord,
+    updateMediaRecord,
+    deleteMediaRecord,
+    updatePremiumResource,
+  };
+}
+
+// ============ 活动文件管理 Hook ================
+
+export interface ActivityFile {
+  id: string;
+  activityId: string;
+  name: string;
+  type: string;
+  size: number;
+  uploadTime: string;
+  objectUrl?: string;
+}
+
+/**
+ * 活动文件管理 Hook
+ * 使用浏览器原生 API 存储文件数据
+ */
+export function useActivityFiles(activityId: string) {
+  const [files, setFiles] = useState<ActivityFile[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // 加载文件列表
+  const loadFiles = useCallback(() => {
+    if (!activityId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const activityFiles = fileStorage.getFilesByActivity(activityId);
+      setFiles(activityFiles);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载文件失败');
+    } finally {
+      setLoading(false);
+    }
+  }, [activityId]);
+
+  // 初始加载
+  useEffect(() => {
+    loadFiles();
+  }, [loadFiles]);
+
+  // 上传文件
+  const uploadFile = useCallback(async (file: File) => {
+    if (!activityId) return null;
+    setUploading(true);
+    setError(null);
+    try {
+      const newFile = await fileStorage.upload(file, activityId);
+      setFiles(prev => [newFile, ...prev]);
+      return newFile;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '上传失败');
+      throw err;
+    } finally {
+      setUploading(false);
+    }
+  }, [activityId]);
+
+  // 批量上传
+  const uploadFiles = useCallback(async (fileList: FileList | File[]) => {
+    const fileArray = Array.from(fileList);
+    const results: ActivityFile[] = [];
+
+    for (const file of fileArray) {
+      try {
+        const result = await uploadFile(file);
+        if (result) results.push(result);
+      } catch (err) {
+        console.error(`文件 ${file.name} 上传失败:`, err);
+      }
+    }
+
+    return results;
+  }, [uploadFile]);
+
+  // 删除文件
+  const deleteFile = useCallback(async (fileId: string) => {
+    try {
+      await fileStorage.deleteFile(fileId);
+      setFiles(prev => prev.filter(f => f.id !== fileId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '删除失败');
+      throw err;
+    }
+  }, []);
+
+  // 重命名文件
+  const renameFile = useCallback((fileId: string, newName: string) => {
+    try {
+      fileStorage.renameFile(fileId, newName);
+      setFiles(prev => prev.map(f =>
+        f.id === fileId ? { ...f, name: newName } : f
+      ));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '重命名失败');
+      throw err;
+    }
+  }, []);
+
+  // 下载文件
+  const downloadFile = useCallback(async (fileId: string) => {
+    try {
+      await fileStorage.downloadFile(fileId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '下载失败');
+      throw err;
+    }
+  }, []);
+
+  // 预览文件
+  const previewFile = useCallback(async (fileId: string): Promise<string | null> => {
+    try {
+      return await fileStorage.previewFile(fileId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '预览失败');
+      return null;
+    }
+  }, []);
+
+  // 清空所有文件
+  const clearAllFiles = useCallback(async () => {
+    try {
+      await fileStorage.clearActivityFiles(activityId);
+      setFiles([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '清空失败');
+      throw err;
+    }
+  }, [activityId]);
+
+  return {
+    files,
+    loading,
+    uploading,
+    error,
+    loadFiles,
+    uploadFile,
+    uploadFiles,
+    deleteFile,
+    renameFile,
+    downloadFile,
+    previewFile,
+    clearAllFiles,
+  };
 }

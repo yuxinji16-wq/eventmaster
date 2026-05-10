@@ -4,10 +4,10 @@
 
 ## 技术栈
 
-- **框架**: React 18 + TypeScript
+- **框架**: React 19 + TypeScript
 - **构建**: Vite
 - **样式**: Tailwind CSS
-- **路由**: React Router v6
+- **路由**: React Router v7
 - **图表**: Recharts
 - **图标**: Lucide React
 - **AI 服务**: Google Gemini API
@@ -137,3 +137,9 @@ const response = await request('/activities');
 ```
 
 401 响应时会自动清除 token 并重定向到登录页。
+
+## 当前治理重点（2026-05-10）
+
+- 前端不再作为 Gemini 敏感凭据持有端，需迁移为后端代理调用。
+- `backendApi.ts` 将按领域逐步拆分，降低单文件复杂度。
+- `fileApi` 需与后端能力对齐（实现或下线），避免死接口。
